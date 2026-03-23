@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ConfirmModal from "./ConfirmModal";
 
 export default function ProjectsPanel({
   projects,
@@ -20,6 +21,7 @@ export default function ProjectsPanel({
   const [editFormErrors, setEditFormErrors] = useState({});
   const [savingId, setSavingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [projectToDelete, setProjectToDelete] = useState(null);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -80,11 +82,15 @@ export default function ProjectsPanel({
 
   const handleDelete = async (project) => {
     if (editingId !== null || deletingId !== null) return;
-    const ok = window.confirm(`Delete project "${project.name}"?`);
-    if (!ok) return;
-    setDeletingId(project.id);
+    setProjectToDelete(project);
+  };
+
+  const confirmDelete = async () => {
+    if (!projectToDelete) return;
+    setDeletingId(projectToDelete.id);
     try {
-      await onDeleteProject(project.id);
+      await onDeleteProject(projectToDelete.id);
+      setProjectToDelete(null);
     } finally {
       setDeletingId(null);
     }
@@ -250,6 +256,19 @@ export default function ProjectsPanel({
             tasks.
           </p>
         </div>
+      )}
+
+      {projectToDelete && (
+        <ConfirmModal
+          title="Delete project?"
+          message={`This will permanently remove "${projectToDelete.name}" and its tasks.`}
+          confirmLabel="Delete project"
+          busy={deletingId === projectToDelete.id}
+          onCancel={() => {
+            if (deletingId === null) setProjectToDelete(null);
+          }}
+          onConfirm={confirmDelete}
+        />
       )}
     </section>
   );

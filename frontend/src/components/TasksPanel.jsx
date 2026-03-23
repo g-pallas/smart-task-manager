@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ConfirmModal from "./ConfirmModal";
 
 const STATUS_OPTIONS = ["todo", "in_progress", "done"];
 
@@ -34,6 +35,7 @@ export default function TasksPanel({
   const [savingTaskId, setSavingTaskId] = useState(null);
   const [isFiltering, setIsFiltering] = useState(false);
   const [isPaginating, setIsPaginating] = useState(false);
+  const [taskToDelete, setTaskToDelete] = useState(null);
 
   const startEdit = (task) => {
     setEditingTaskId(task.id);
@@ -124,6 +126,18 @@ export default function TasksPanel({
       await onLoadTasks(selectedProject.id, buildParams(1));
     } finally {
       setIsFiltering(false);
+    }
+  };
+
+  const confirmDeleteTask = async () => {
+    if (!taskToDelete) return;
+
+    setDeletingTaskId(taskToDelete.id);
+    try {
+      await onDeleteTask(taskToDelete.id, buildParams(safeCurrentPage));
+      setTaskToDelete(null);
+    } finally {
+      setDeletingTaskId(null);
     }
   };
 
@@ -364,14 +378,7 @@ export default function TasksPanel({
 
                 <button
                   type="button"
-                  onClick={async () => {
-                    setDeletingTaskId(t.id);
-                    try {
-                      await onDeleteTask(t.id, buildParams(safeCurrentPage));
-                    } finally {
-                      setDeletingTaskId(null);
-                    }
-                  }}
+                  onClick={() => setTaskToDelete(t)}
                   className="rounded bg-red-600 px-2 py-1 text-sm text-white disabled:opacity-60"
                   disabled={
                     statusUpdatingTaskId !== null ||
@@ -446,6 +453,19 @@ export default function TasksPanel({
           </button>
         </div>
       </div>
+
+      {taskToDelete && (
+        <ConfirmModal
+          title="Delete task?"
+          message={`This will permanently remove "${taskToDelete.title}".`}
+          confirmLabel="Delete task"
+          busy={deletingTaskId === taskToDelete.id}
+          onCancel={() => {
+            if (deletingTaskId === null) setTaskToDelete(null);
+          }}
+          onConfirm={confirmDeleteTask}
+        />
+      )}
     </section>
   );
 }
