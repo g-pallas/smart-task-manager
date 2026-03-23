@@ -9,6 +9,7 @@ export default function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [authMode, setAuthMode] = useState("login");
   const [authFormErrors, setAuthFormErrors] = useState({});
+  const [authLoading, setAuthLoading] = useState(false);
 
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -122,6 +123,7 @@ export default function App() {
 
   const login = async ({ email, password }) => {
     setAuthFormErrors({});
+    setAuthLoading(true);
     try {
       const res = await api.post("/login", { email, password });
       localStorage.setItem("token", res.data.token);
@@ -135,11 +137,14 @@ export default function App() {
         "Failed to sign in. Check the API URL and CORS settings.";
       showToast(message, "error");
       return false;
+    } finally {
+      setAuthLoading(false);
     }
   };
 
   const register = async (payload) => {
     setAuthFormErrors({});
+    setAuthLoading(true);
     try {
       const res = await api.post("/register", payload);
       localStorage.setItem("token", res.data.token);
@@ -153,6 +158,8 @@ export default function App() {
       setAuthFormErrors(getFieldErrors(err));
       showToast(message, "error");
       return false;
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -330,7 +337,9 @@ export default function App() {
         {authMode === "login" ? (
           <LoginForm
             onLogin={login}
+            loading={authLoading}
             onSwitchToRegister={() => {
+              if (authLoading) return;
               setAuthFormErrors({});
               setAuthMode("register");
             }}
@@ -338,8 +347,10 @@ export default function App() {
         ) : (
           <RegisterForm
             onRegister={register}
+            loading={authLoading}
             formErrors={authFormErrors}
             onSwitchToLogin={() => {
+              if (authLoading) return;
               setAuthFormErrors({});
               setAuthMode("login");
             }}

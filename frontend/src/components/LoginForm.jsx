@@ -1,6 +1,10 @@
 import { useState } from "react";
 
-export default function LoginForm({ onLogin, onSwitchToRegister }) {
+export default function LoginForm({
+  onLogin,
+  onSwitchToRegister,
+  loading = false,
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -19,6 +23,7 @@ export default function LoginForm({ onLogin, onSwitchToRegister }) {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
           autoComplete="email"
+          disabled={loading}
         />
         <input
           className="mb-3 w-full rounded border p-2"
@@ -27,12 +32,19 @@ export default function LoginForm({ onLogin, onSwitchToRegister }) {
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
           autoComplete="current-password"
+          disabled={loading}
         />
-        <button className="w-full rounded bg-blue-600 p-2 text-white">Sign in</button>
+        <button
+          disabled={loading}
+          className="w-full rounded bg-blue-600 p-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? "Signing in..." : "Sign in"}
+        </button>
         <button
           type="button"
           onClick={onSwitchToRegister}
-          className="mt-3 w-full text-sm text-slate-600 underline"
+          disabled={loading}
+          className="mt-3 w-full text-sm text-slate-600 underline disabled:cursor-not-allowed disabled:opacity-60"
         >
           Need an account? Create one
         </button>

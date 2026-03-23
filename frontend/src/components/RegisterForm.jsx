@@ -1,6 +1,11 @@
 import { useState } from "react";
 
-export default function RegisterForm({ onRegister, formErrors = {}, onSwitchToLogin }) {
+export default function RegisterForm({
+  onRegister,
+  formErrors = {},
+  onSwitchToLogin,
+  loading = false,
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -29,6 +34,7 @@ export default function RegisterForm({ onRegister, formErrors = {}, onSwitchToLo
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
           autoComplete="name"
+          disabled={loading}
         />
         {formErrors.name?.[0] && (
           <p className="mb-2 text-sm text-red-600">{formErrors.name[0]}</p>
@@ -40,6 +46,7 @@ export default function RegisterForm({ onRegister, formErrors = {}, onSwitchToLo
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
           autoComplete="email"
+          disabled={loading}
         />
         {formErrors.email?.[0] && (
           <p className="mb-2 text-sm text-red-600">{formErrors.email[0]}</p>
@@ -52,6 +59,7 @@ export default function RegisterForm({ onRegister, formErrors = {}, onSwitchToLo
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
           autoComplete="new-password"
+          disabled={loading}
         />
         {formErrors.password?.[0] && (
           <p className="mb-2 text-sm text-red-600">{formErrors.password[0]}</p>
@@ -64,16 +72,21 @@ export default function RegisterForm({ onRegister, formErrors = {}, onSwitchToLo
           onChange={(e) => setPasswordConfirmation(e.target.value)}
           placeholder="Confirm password"
           autoComplete="new-password"
+          disabled={loading}
         />
 
-        <button className="w-full rounded bg-emerald-600 p-2 text-white">
-          Create account
+        <button
+          disabled={loading}
+          className="w-full rounded bg-emerald-600 p-2 text-white disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {loading ? "Creating account..." : "Create account"}
         </button>
 
         <button
           type="button"
           onClick={onSwitchToLogin}
-          className="mt-3 w-full text-sm text-slate-600 underline"
+          disabled={loading}
+          className="mt-3 w-full text-sm text-slate-600 underline disabled:cursor-not-allowed disabled:opacity-60"
         >
           Already have an account? Sign in
         </button>
