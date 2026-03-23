@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function LoginForm({ onLogin }) {
+export default function LoginForm({ onLogin, onSwitchToRegister }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
@@ -29,6 +29,13 @@ export default function LoginForm({ onLogin }) {
           autoComplete="current-password"
         />
         <button className="w-full rounded bg-blue-600 p-2 text-white">Sign in</button>
+        <button
+          type="button"
+          onClick={onSwitchToRegister}
+          className="mt-3 w-full text-sm text-slate-600 underline"
+        >
+          Need an account? Create one
+        </button>
       </form>
     </main>
   );

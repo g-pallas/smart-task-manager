@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import api, { setUnauthorizedHandler } from "./lib/api";
 import LoginForm from "./components/LoginForm";
+import RegisterForm from "./components/RegisterForm";
 import ProjectsPanel from "./components/ProjectsPanel";
 import TasksPanel from "./components/TasksPanel";
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
+  const [authMode, setAuthMode] = useState("login");
+  const [authFormErrors, setAuthFormErrors] = useState({});
 
   const [projects, setProjects] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
@@ -30,6 +33,8 @@ export default function App() {
     setUnauthorizedHandler(() => {
       showToast("Session expired. Please log in again.", "error");
       setToken(null);
+      setAuthMode("login");
+      setAuthFormErrors({});
       setProjects([]);
       setSelectedProject(null);
       setTasks([]);
@@ -116,6 +121,7 @@ export default function App() {
   };
 
   const login = async ({ email, password }) => {
+    setAuthFormErrors({});
     try {
       const res = await api.post("/login", { email, password });
       localStorage.setItem("token", res.data.token);
@@ -127,6 +133,24 @@ export default function App() {
         err?.response?.data?.message ||
         err?.response?.data?.errors?.email?.[0] ||
         "Failed to sign in. Check the API URL and CORS settings.";
+      showToast(message, "error");
+      return false;
+    }
+  };
+
+  const register = async (payload) => {
+    setAuthFormErrors({});
+    try {
+      const res = await api.post("/register", payload);
+      localStorage.setItem("token", res.data.token);
+      setToken(res.data.token);
+      setAuthMode("login");
+      showToast("Account created.");
+      return true;
+    } catch (err) {
+      const message =
+        err?.response?.data?.message || "Failed to create account.";
+      setAuthFormErrors(getFieldErrors(err));
       showToast(message, "error");
       return false;
     }
@@ -303,7 +327,24 @@ export default function App() {
     return (
       <>
         {toastNode}
-        <LoginForm onLogin={login} />
+        {authMode === "login" ? (
+          <LoginForm
+            onLogin={login}
+            onSwitchToRegister={() => {
+              setAuthFormErrors({});
+              setAuthMode("register");
+            }}
+          />
+        ) : (
+          <RegisterForm
+            onRegister={register}
+            formErrors={authFormErrors}
+            onSwitchToLogin={() => {
+              setAuthFormErrors({});
+              setAuthMode("login");
+            }}
+          />
+        )}
       </>
     );
   }
