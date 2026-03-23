@@ -7,6 +7,7 @@ import TasksPanel from "./components/TasksPanel";
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
+  const [currentUser, setCurrentUser] = useState(null);
   const [authMode, setAuthMode] = useState("login");
   const [authFormErrors, setAuthFormErrors] = useState({});
   const [authLoading, setAuthLoading] = useState(false);
@@ -34,6 +35,7 @@ export default function App() {
     setUnauthorizedHandler(() => {
       showToast("Session expired. Please log in again.", "error");
       setToken(null);
+      setCurrentUser(null);
       setAuthMode("login");
       setAuthFormErrors({});
       setProjects([]);
@@ -80,8 +82,20 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (token) loadProjects();
+    if (token) {
+      loadCurrentUser();
+      loadProjects();
+    }
   }, [token]);
+
+  const loadCurrentUser = async () => {
+    try {
+      const res = await api.get("/me");
+      setCurrentUser(res.data ?? null);
+    } catch {
+      setCurrentUser(null);
+    }
+  };
 
   const loadProjects = async () => {
     setProjectsLoading(true);
@@ -128,6 +142,7 @@ export default function App() {
       const res = await api.post("/login", { email, password });
       localStorage.setItem("token", res.data.token);
       setToken(res.data.token);
+      setCurrentUser(res.data.user ?? null);
       showToast("Logged in.");
       return true;
     } catch (err) {
@@ -149,6 +164,7 @@ export default function App() {
       const res = await api.post("/register", payload);
       localStorage.setItem("token", res.data.token);
       setToken(res.data.token);
+      setCurrentUser(res.data.user ?? null);
       setAuthMode("login");
       showToast("Account created.");
       return true;
@@ -169,6 +185,7 @@ export default function App() {
     } finally {
       localStorage.removeItem("token");
       setToken(null);
+      setCurrentUser(null);
       setProjects([]);
       setSelectedProject(null);
       setTasks([]);
@@ -366,12 +383,22 @@ export default function App() {
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-2xl font-bold">Smart Task Manager</h1>
-          <button
-            onClick={logout}
-            className="rounded bg-slate-800 px-4 py-2 text-white"
-          >
-            Logout
-          </button>
+          <div className="flex items-center gap-3">
+            {currentUser && (
+              <div className="rounded bg-white px-3 py-2 text-sm text-slate-700 shadow">
+                Signed in as{" "}
+                <span className="font-medium">
+                  {currentUser.name || currentUser.email}
+                </span>
+              </div>
+            )}
+            <button
+              onClick={logout}
+              className="rounded bg-slate-800 px-4 py-2 text-white"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2">
