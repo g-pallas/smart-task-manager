@@ -1,8 +1,8 @@
 import { useState } from "react";
 
 export default function LoginForm({ onLogin }) {
-  const [email, setEmail] = useState("test2@example.com");
-  const [password, setPassword] = useState("password123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
@@ -18,6 +18,7 @@ export default function LoginForm({ onLogin }) {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="Email"
+          autoComplete="email"
         />
         <input
           className="mb-3 w-full rounded border p-2"
@@ -25,6 +26,7 @@ export default function LoginForm({ onLogin }) {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Password"
+          autoComplete="current-password"
         />
         <button className="w-full rounded bg-blue-600 p-2 text-white">Sign in</button>
       </form>
