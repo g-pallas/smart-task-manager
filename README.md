@@ -2,6 +2,12 @@
 
 Full-stack web app for managing projects and tasks, built with Laravel (API) + React (Vite) + Tailwind CSS.
 
+## Live Deployment
+
+- Frontend: `https://smart-task-manager-azure.vercel.app`
+- Backend API: `https://smart-task-manager-production-c6c4.up.railway.app/api`
+- Backend health check: `https://smart-task-manager-production-c6c4.up.railway.app/up`
+
 ## What This App Does
 
 This app lets a logged-in user:
@@ -27,13 +33,13 @@ This project is your practical full-stack training app. It teaches you to:
 - Laravel (API-only style)
 - Laravel Sanctum (token authentication)
 - Eloquent ORM
-- SQLite/MySQL compatible schema design
+- PostgreSQL on Railway
 
 ### Frontend
 - React (Vite)
 - Tailwind CSS
 - Axios
-- React Router DOM (installed)
+- Vercel deployment
 
 ## Project Structure
 
@@ -118,6 +124,8 @@ Tasks:
 - Backend feature tests for auth and authorization rules
 - Backend feature tests for validation and forbidden-access cases
 - Frontend integration tests for auth, validation, task create, and inline task edit flows
+- Live production deployment on Railway + Vercel
+- Production smoke-tested auth, project, task, refresh, and logout/login flows
 
 ## Commands You Used (CLI)
 
@@ -252,11 +260,11 @@ If you feel lost: that is normal at this stage. You are now working at the integ
 
 ## Next Recommended Steps
 
-1. Prepare backend and frontend for deployment
-2. Deploy frontend + backend and publish links in portfolio
-3. Add a small audit log (who updated/deleted tasks)
-4. Add richer team/member management UI
-5. Add member invitation/assignment flows
+1. Add a public registration page or admin-only user creation UI
+2. Add a small audit log (who updated/deleted tasks)
+3. Add richer team/member management UI
+4. Add member invitation/assignment flows
+5. Add a custom domain and polish the deployed UI
 
 ## Quick Start (Run Existing App)
 
@@ -273,6 +281,14 @@ npm run dev
 Open frontend at `http://localhost:5173`.
 
 ## Deployment Prep
+
+### Current production setup
+
+- Frontend host: Vercel
+- Backend host: Railway
+- Database: Railway PostgreSQL
+- Frontend project root: `frontend`
+- Backend service root: `backend`
 
 ### Backend checklist
 - Set a production `APP_KEY`
@@ -516,6 +532,16 @@ After deploying, verify:
 3. task create works
 4. inline task edit works
 5. protected routes reject missing tokens
+
+### Production verification completed
+
+Verified on the live deployment:
+1. login works on Vercel frontend against Railway backend
+2. projects can be created and selected
+3. tasks can be created and updated
+4. data persists after browser refresh
+5. data persists after logout and login again
+6. Railway database migrations completed successfully in the deployed environment
 
 ## Troubleshooting
 
