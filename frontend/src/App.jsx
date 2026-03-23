@@ -226,10 +226,12 @@ export default function App() {
         setSelectedProject((prev) => (prev ? { ...prev, ...payload } : prev));
       }
       showToast("Project updated.");
+      return { ok: true, fieldErrors: {} };
     } catch (err) {
       const message = err?.response?.data?.message || "Failed to update project.";
       setProjectsError(message);
       showToast(message, "error");
+      return { ok: false, fieldErrors: getFieldErrors(err) };
     }
   };
 

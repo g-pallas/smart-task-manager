@@ -15,6 +15,10 @@ export default function ProjectsPanel({
   const [description, setDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editFormErrors, setEditFormErrors] = useState({});
+  const [savingId, setSavingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
 
   const submit = async (e) => {
@@ -32,28 +36,45 @@ export default function ProjectsPanel({
     }
   };
 
-  const handleEdit = async (project) => {
-    if (editingId !== null || deletingId !== null) return;
-    const nextName = window.prompt("Project name:", project.name);
-    if (nextName === null) return;
-
-    const nextDescription = window.prompt(
-      "Project description:",
-      project.description ?? "",
-    );
-    if (nextDescription === null) return;
-
-    const trimmedName = nextName.trim();
-    if (!trimmedName) return;
-
+  const startEdit = (project) => {
+    if (editingId !== null || deletingId !== null || savingId !== null) return;
     setEditingId(project.id);
+    setEditName(project.name ?? "");
+    setEditDescription(project.description ?? "");
+    setEditFormErrors({});
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditName("");
+    setEditDescription("");
+    setEditFormErrors({});
+  };
+
+  const saveEdit = async (project) => {
+    const trimmedName = editName.trim();
+    if (!trimmedName || savingId !== null) {
+      if (!trimmedName) {
+        setEditFormErrors({ name: ["The project name field is required."] });
+      }
+      return;
+    }
+
+    setEditFormErrors({});
+    setSavingId(project.id);
     try {
-      await onUpdateProject(project.id, {
+      const result = await onUpdateProject(project.id, {
         name: trimmedName,
-        description: nextDescription.trim(),
+        description: editDescription.trim(),
       });
+
+      if (result?.ok) {
+        cancelEdit();
+      } else {
+        setEditFormErrors(result?.fieldErrors ?? {});
+      }
     } finally {
-      setEditingId(null);
+      setSavingId(null);
     }
   };
 
@@ -114,9 +135,13 @@ export default function ProjectsPanel({
 
       <div className="space-y-3">
         {projects.map((p) => {
-          const isRowBusy = editingId === p.id || deletingId === p.id;
+          const isRowBusy =
+            editingId === p.id || deletingId === p.id || savingId === p.id;
           const isAnyProjectActionBusy =
-            editingId !== null || deletingId !== null || isCreating;
+            editingId !== null ||
+            deletingId !== null ||
+            savingId !== null ||
+            isCreating;
 
           return (
             <div
@@ -127,40 +152,91 @@ export default function ProjectsPanel({
                   : "bg-white"
               }`}
             >
-              <button
-                type="button"
-                onClick={() => onSelectProject(p)}
-                className="mb-2 w-full text-left"
-                disabled={isRowBusy}
-              >
-                <h3 className="font-semibold">{p.name}</h3>
-                <p className="text-sm text-slate-600">{p.description}</p>
-              </button>
+              {editingId === p.id ? (
+                <div className="space-y-2">
+                  <input
+                    className="w-full rounded border p-2"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Project name"
+                    disabled={savingId !== null}
+                  />
+                  {editFormErrors?.name?.[0] && (
+                    <p className="text-sm text-red-600">
+                      {editFormErrors.name[0]}
+                    </p>
+                  )}
 
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleEdit(p);
-                  }}
-                  className="rounded bg-amber-500 px-3 py-1 text-sm text-white disabled:opacity-60"
-                  disabled={isAnyProjectActionBusy}
-                >
-                  {editingId === p.id ? "Editing..." : "Edit"}
-                </button>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDelete(p);
-                  }}
-                  className="rounded bg-red-600 px-3 py-1 text-sm text-white disabled:opacity-60"
-                  disabled={isAnyProjectActionBusy}
-                >
-                  {deletingId === p.id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
+                  <textarea
+                    className="w-full rounded border p-2"
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    placeholder="Project description"
+                    disabled={savingId !== null}
+                  />
+                  {editFormErrors?.description?.[0] && (
+                    <p className="text-sm text-red-600">
+                      {editFormErrors.description[0]}
+                    </p>
+                  )}
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(p)}
+                      className="rounded bg-emerald-600 px-3 py-1 text-sm text-white disabled:opacity-60"
+                      disabled={savingId !== null}
+                    >
+                      {savingId === p.id ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="rounded bg-slate-500 px-3 py-1 text-sm text-white disabled:opacity-60"
+                      disabled={savingId !== null}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onSelectProject(p)}
+                    className="mb-2 w-full text-left"
+                    disabled={isRowBusy}
+                  >
+                    <h3 className="font-semibold">{p.name}</h3>
+                    <p className="text-sm text-slate-600">{p.description}</p>
+                  </button>
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        startEdit(p);
+                      }}
+                      className="rounded bg-amber-500 px-3 py-1 text-sm text-white disabled:opacity-60"
+                      disabled={isAnyProjectActionBusy}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDelete(p);
+                      }}
+                      className="rounded bg-red-600 px-3 py-1 text-sm text-white disabled:opacity-60"
+                      disabled={isAnyProjectActionBusy}
+                    >
+                      {deletingId === p.id ? "Deleting..." : "Delete"}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           );
         })}
