@@ -131,6 +131,13 @@ export default function TasksPanel({
     return (
       <section>
         <h2 className="mb-3 text-xl font-semibold">Select a project</h2>
+        <div className="rounded border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600 shadow">
+          <p className="font-medium text-slate-800">Choose a project to begin.</p>
+          <p className="mt-1">
+            After you select a project, you can create tasks, update their
+            status, search, and paginate through them here.
+          </p>
+        </div>
       </section>
     );
   }
@@ -379,6 +386,17 @@ export default function TasksPanel({
           </div>
         ))}
       </div>
+      {!loading && tasks.length === 0 && (
+        <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600 shadow">
+          <p className="font-medium text-slate-800">
+            No tasks found for this project.
+          </p>
+          <p className="mt-1">
+            Add your first task above, or adjust your filters if you expected
+            existing tasks to appear.
+          </p>
+        </div>
+      )}
       <div className="mt-3 flex items-center justify-between rounded bg-white p-3 shadow">
         <p className="text-sm text-slate-600">
           Showing {pagination?.from ?? 0}-{pagination?.to ?? 0} of{" "}

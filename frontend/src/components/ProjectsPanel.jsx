@@ -165,6 +165,16 @@ export default function ProjectsPanel({
           );
         })}
       </div>
+
+      {!loading && projects.length === 0 && (
+        <div className="mt-4 rounded border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600 shadow">
+          <p className="font-medium text-slate-800">No projects yet.</p>
+          <p className="mt-1">
+            Create your first project using the form above to start organizing
+            tasks.
+          </p>
+        </div>
+      )}
     </section>
   );
 }
