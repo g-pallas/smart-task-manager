@@ -13,7 +13,7 @@ Full-stack web app for managing projects and tasks, built with Laravel (API) + R
 This app lets a logged-in user:
 - Create and manage projects
 - Create and manage tasks inside a selected project
-- Track task status (`todo`, `in_progress`, `done`)
+- Track task status (`To do`, `In Progress`, `Done`)
 - Filter and search tasks
 - Use pagination for task lists
 - Stay authenticated with Sanctum token auth
@@ -113,9 +113,10 @@ Tasks:
 - Login/logout session handling
 - Public user registration with auto-login
 - Project CRUD
+- Inline project edit
 - Task CRUD
 - Inline task edit (title, description, due date)
-- Task status update
+- Task status update with human-friendly status labels
 - Task filtering by status
 - Task search by text
 - Task pagination (Prev/Next + page summary)
@@ -124,6 +125,8 @@ Tasks:
 - Toast notifications for success/error feedback
 - Field-level validation errors from Laravel `422` responses
 - Unauthorized response handling (`401`)
+- Current signed-in user shown in the app header
+- In-app confirmation modal for project and task deletion
 - Backend feature tests for auth and authorization rules
 - Backend feature tests for validation and forbidden-access cases
 - Frontend integration tests for auth, validation, task create, and inline task edit flows
@@ -132,6 +135,8 @@ Tasks:
 - First-time empty-state guidance for projects and tasks
 - Production auth forms with loading/disabled states
 - Custom app title and favicon for deployed branding
+- Visual polish pass for auth screens, dashboard layout, and action cards
+- Friendlier due date display formatting in task cards
 
 ## Commands You Used (CLI)
 
@@ -545,10 +550,13 @@ Verified on the live deployment:
 1. login works on Vercel frontend against Railway backend
 2. public registration works and logs users in automatically
 3. projects can be created and selected
-4. tasks can be created and updated
-5. data persists after browser refresh
-6. data persists after logout and login again
-7. Railway database migrations completed successfully in the deployed environment
+4. projects can be edited inline and deleted through confirmation modal
+5. tasks can be created, updated, and deleted through confirmation modal
+6. current signed-in user is displayed in the header
+7. polished dashboard UI is deployed with readable status labels and due dates
+8. data persists after browser refresh
+9. data persists after logout and login again
+10. Railway database migrations completed successfully in the deployed environment
 
 ## Troubleshooting
 
