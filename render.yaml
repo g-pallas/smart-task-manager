@@ -1,0 +1,47 @@
+services:
+  - type: web
+    name: smart-task-manager-backend
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: backend/Dockerfile
+    dockerContext: backend
+    preDeployCommand: php artisan migrate --force
+    envVars:
+      - key: APP_NAME
+        value: Smart Task Manager
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: smart-task-manager-db
+          property: connectionString
+      - key: DB_SSLMODE
+        value: require
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: LOG_CHANNEL
+        value: stack
+      - key: LOG_LEVEL
+        value: info
+
+databases:
+  - name: smart-task-manager-db
+    plan: free
+    region: singapore
+    databaseName: smart_task_manager
+    user: smart_task_manager
