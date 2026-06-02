@@ -7,15 +7,6 @@ const STATUS_OPTIONS = [
   { value: "done", label: "Done" },
 ];
 
-const STATUS_STYLES = {
-  todo: "status-chip status-chip-todo",
-  in_progress: "status-chip status-chip-in-progress",
-  done: "status-chip status-chip-done",
-};
-
-const getStatusLabel = (value) =>
-  STATUS_OPTIONS.find((option) => option.value === value)?.label ?? value;
-
 const formatDueDate = (value) => {
   if (!value) return "N/A";
 
@@ -33,12 +24,33 @@ const formatDueDate = (value) => {
   }).format(parsedDate);
 };
 
+const formatTaskTime = (task, index) => {
+  if (!task?.due_date) return ["09:00 AM", "11:30 AM", "02:00 PM", "04:30 PM"][index % 4];
+
+  const parsedDate = new Date(task.due_date);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return ["09:00 AM", "11:30 AM", "02:00 PM", "04:30 PM"][index % 4];
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(parsedDate);
+};
+
+const getTaskTone = (status, index) => {
+  if (status === "done") return "routine";
+  if (status === "in_progress") return "inprogress";
+  return index < 2 ? "important" : "routine";
+};
+
 export default function TasksPanel({
   selectedProject,
   tasks,
   onCreateTask,
   onUpdateTaskStatus,
   onDeleteTask,
+  onArchiveTask,
   onLoadTasks,
   loading,
   error,
@@ -173,46 +185,208 @@ export default function TasksPanel({
 
   if (!selectedProject) {
     return (
-      <section>
-        <div className="mb-5">
-          <p className="section-label">Task Board</p>
-          <h2 className="panel-heading mt-3">Select a project</h2>
-          <p className="panel-subheading mt-2">
-            Your task workflow appears here once you open a project from the
-            left side.
-          </p>
+      <section className="today-panel">
+        <div className="section-heading-row">
+          <h2>Today&apos;s Tasks</h2>
+          <button className="dots-button" type="button" aria-label="More task options">
+            ...
+          </button>
         </div>
-        <div className="surface-note p-5 text-sm text-slate-600">
-          <p className="font-medium text-slate-800">Choose a project to begin.</p>
-          <p className="mt-1">
-            After you select a project, you can create tasks, update their
-            status, search, and paginate through them here.
-          </p>
+        <div className="empty-dashboard-state">
+          <p>Choose a project to begin.</p>
+          <span>Your task list appears here once a project is selected.</span>
         </div>
       </section>
     );
   }
 
   return (
-    <section>
-      <div className="mb-5">
-        <p className="section-label">Execution</p>
-        <h2 className="panel-heading mt-3">Tasks: {selectedProject.name}</h2>
-        <p className="panel-subheading mt-2">
-          Add, filter, edit, and review the work inside this project without
-          leaving the page.
-        </p>
+    <section className="today-panel">
+      <div className="section-heading-row">
+        <h2>Today&apos;s Tasks</h2>
+        <button className="dots-button" type="button" aria-label="More task options">
+          ...
+        </button>
       </div>
       {loading && (
-        <p className="mb-2 text-sm text-slate-500">Loading tasks...</p>
+        <p className="inline-status">Loading tasks...</p>
       )}
       {error && (
-        <p className="mb-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
+        <p className="dashboard-error">{error}</p>
       )}
 
-      <form onSubmit={submitTask} className="panel-card mb-5 p-5">
+      <div className="today-task-list">
+        {tasks.map((t, index) => {
+          const tone = getTaskTone(t.status, index);
+
+          return (
+            <div key={t.id} className={`today-task today-task-${tone}`}>
+              <div className="today-task-topline">
+                <span>{tone === "inprogress" ? "In Progress" : tone}</span>
+                <time>{formatTaskTime(t, index)}</time>
+              </div>
+
+              {editingTaskId === t.id ? (
+                <div className="edit-stack">
+                  <input
+                    className="app-input"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="Task title"
+                  />
+                  {editFormErrors?.title?.[0] && (
+                    <p className="text-sm text-red-600">
+                      {editFormErrors.title[0]}
+                    </p>
+                  )}
+                  <textarea
+                    className="app-textarea"
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    placeholder="Task description"
+                  />
+                  {editFormErrors?.description?.[0] && (
+                    <p className="text-sm text-red-600">
+                      {editFormErrors.description[0]}
+                    </p>
+                  )}
+                  <input
+                    type="date"
+                    className="app-input"
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                  />
+                  {editFormErrors?.due_date?.[0] && (
+                    <p className="text-sm text-red-600">
+                      {editFormErrors.due_date[0]}
+                    </p>
+                  )}
+                  <div className="action-row">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(t.id)}
+                      className="btn btn-primary px-4 py-2 text-sm disabled:opacity-60"
+                      disabled={savingTaskId !== null}
+                    >
+                      {savingTaskId === t.id ? "Saving..." : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="btn btn-muted px-4 py-2 text-sm disabled:opacity-60"
+                      disabled={savingTaskId !== null}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h3>{t.title}</h3>
+                  <label className="task-check-row">
+                    <input
+                      type="checkbox"
+                      checked={t.status === "done"}
+                      disabled={
+                        statusUpdatingTaskId !== null ||
+                        deletingTaskId !== null ||
+                        savingTaskId !== null
+                      }
+                      onChange={async (e) => {
+                        setStatusUpdatingTaskId(t.id);
+                        try {
+                          await onUpdateTaskStatus(
+                            t.id,
+                            e.target.checked ? "done" : "todo",
+                            buildParams(safeCurrentPage),
+                          );
+                        } finally {
+                          setStatusUpdatingTaskId(null);
+                        }
+                      }}
+                    />
+                    <span>{t.description || formatDueDate(t.due_date)}</span>
+                  </label>
+                  <div className="task-mini-actions">
+                    <select
+                      className="app-select"
+                      value={t.status}
+                      disabled={
+                        statusUpdatingTaskId !== null ||
+                        deletingTaskId !== null ||
+                        savingTaskId !== null
+                      }
+                      onChange={async (e) => {
+                        setStatusUpdatingTaskId(t.id);
+                        try {
+                          await onUpdateTaskStatus(
+                            t.id,
+                            e.target.value,
+                            buildParams(safeCurrentPage),
+                          );
+                        } finally {
+                          setStatusUpdatingTaskId(null);
+                        }
+                      }}
+                    >
+                      {STATUS_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(t)}
+                      className="text-link"
+                      disabled={
+                        statusUpdatingTaskId !== null ||
+                        deletingTaskId !== null ||
+                        savingTaskId !== null
+                      }
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTaskToDelete(t)}
+                      className="text-link text-link-danger"
+                      disabled={
+                        statusUpdatingTaskId !== null ||
+                        deletingTaskId !== null ||
+                        savingTaskId !== null
+                      }
+                    >
+                      {deletingTaskId === t.id ? "Deleting..." : "Delete"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onArchiveTask(selectedProject.id, t.id, buildParams(safeCurrentPage))}
+                      className="text-link"
+                      disabled={
+                        statusUpdatingTaskId !== null ||
+                        deletingTaskId !== null ||
+                        savingTaskId !== null
+                      }
+                    >
+                      Archive
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {!loading && tasks.length === 0 && (
+        <div className="empty-dashboard-state">
+          <p>No tasks found for this project.</p>
+          <span>Add your first task below or adjust the filters.</span>
+        </div>
+      )}
+
+      <form onSubmit={submitTask} className="quick-create-form task-create-form">
         <input
           className="app-input"
           placeholder="Task title"
@@ -225,7 +399,7 @@ export default function TasksPanel({
           <p className="mt-2 text-sm text-red-600">{formErrors.title[0]}</p>
         )}
         <textarea
-          className="app-textarea mt-3"
+          className="app-textarea"
           placeholder="Task description"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
@@ -234,7 +408,7 @@ export default function TasksPanel({
         {formErrors?.description?.[0] && (
           <p className="mt-2 text-sm text-red-600">{formErrors.description[0]}</p>
         )}
-        <div className="mb-2 grid grid-cols-2 gap-2">
+        <div className="form-grid">
           <input
             type="date"
             className="app-input"
@@ -262,15 +436,15 @@ export default function TasksPanel({
           <p className="mb-2 text-sm text-red-600">{formErrors.status[0]}</p>
         )}
         <button
-          className="btn btn-secondary mt-4 disabled:opacity-60"
+          className="btn btn-secondary disabled:opacity-60"
           disabled={isCreatingTask}
         >
           {isCreatingTask ? "Adding..." : "Add Task"}
         </button>
       </form>
 
-      <form onSubmit={applyFilters} className="panel-card mb-5 p-5">
-        <div className="grid grid-cols-2 gap-2">
+      <form onSubmit={applyFilters} className="filter-strip">
+        <div className="form-grid">
           <select
             className="app-select"
             value={filterStatus}
@@ -293,165 +467,14 @@ export default function TasksPanel({
           />
         </div>
         <button
-          className="btn btn-dark mt-4 disabled:opacity-60"
+          className="btn btn-dark disabled:opacity-60"
           disabled={isFiltering}
         >
           {isFiltering ? "Applying..." : "Apply Filters"}
         </button>
       </form>
 
-      <div className="space-y-2">
-        {tasks.map((t) => (
-          <div key={t.id} className="task-card p-4">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="w-full">
-                {editingTaskId === t.id ? (
-                  <div className="space-y-2">
-                    <input
-                      className="app-input"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      placeholder="Task title"
-                    />
-                    {editFormErrors?.title?.[0] && (
-                      <p className="text-sm text-red-600">
-                        {editFormErrors.title[0]}
-                      </p>
-                    )}
-                    <textarea
-                      className="app-textarea"
-                      value={editDescription}
-                      onChange={(e) => setEditDescription(e.target.value)}
-                      placeholder="Task description"
-                    />
-                    {editFormErrors?.description?.[0] && (
-                      <p className="text-sm text-red-600">
-                        {editFormErrors.description[0]}
-                      </p>
-                    )}
-                    <input
-                      type="date"
-                      className="app-input"
-                      value={editDueDate}
-                      onChange={(e) => setEditDueDate(e.target.value)}
-                    />
-                    {editFormErrors?.due_date?.[0] && (
-                      <p className="text-sm text-red-600">
-                        {editFormErrors.due_date[0]}
-                      </p>
-                    )}
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => saveEdit(t.id)}
-                        className="btn btn-primary px-4 py-2 text-sm disabled:opacity-60"
-                        disabled={savingTaskId !== null}
-                      >
-                        {savingTaskId === t.id ? "Saving..." : "Save"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEdit}
-                        className="btn btn-muted px-4 py-2 text-sm disabled:opacity-60"
-                        disabled={savingTaskId !== null}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <h4 className="text-lg font-semibold text-slate-900">
-                      {t.title}
-                    </h4>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {t.description}
-                    </p>
-                    <div className="task-meta-row mt-3">
-                      <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-400">
-                        Due: {formatDueDate(t.due_date)}
-                      </span>
-                      <span className={STATUS_STYLES[t.status] ?? "status-chip"}>
-                        {getStatusLabel(t.status)}
-                      </span>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              <div className="task-actions">
-                <select
-                  className="app-select max-w-[8.5rem] py-2 text-sm"
-                  value={t.status}
-                  disabled={
-                    statusUpdatingTaskId !== null ||
-                    deletingTaskId !== null ||
-                    savingTaskId !== null
-                  }
-                  onChange={async (e) => {
-                    setStatusUpdatingTaskId(t.id);
-                    try {
-                      await onUpdateTaskStatus(
-                        t.id,
-                        e.target.value,
-                        buildParams(safeCurrentPage),
-                      );
-                    } finally {
-                      setStatusUpdatingTaskId(null);
-                    }
-                  }}
-                >
-                  {STATUS_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-
-                {editingTaskId !== t.id && (
-                  <button
-                    type="button"
-                    onClick={() => startEdit(t)}
-                    className="btn btn-warning px-4 py-2 text-sm disabled:opacity-60"
-                    disabled={
-                      statusUpdatingTaskId !== null ||
-                      deletingTaskId !== null ||
-                      savingTaskId !== null
-                    }
-                  >
-                    Edit
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setTaskToDelete(t)}
-                  className="btn btn-danger px-4 py-2 text-sm disabled:opacity-60"
-                  disabled={
-                    statusUpdatingTaskId !== null ||
-                    deletingTaskId !== null ||
-                    savingTaskId !== null
-                  }
-                >
-                  {deletingTaskId === t.id ? "Deleting..." : "Delete"}
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      {!loading && tasks.length === 0 && (
-        <div className="surface-note mt-4 p-5 text-sm text-slate-600">
-          <p className="font-medium text-slate-800">
-            No tasks found for this project.
-          </p>
-          <p className="mt-1">
-            Add your first task above, or adjust your filters if you expected
-            existing tasks to appear.
-          </p>
-        </div>
-      )}
-      <div className="panel-card mt-4 flex items-center justify-between px-4 py-3">
+      <div className="pagination-strip">
         <p className="text-sm text-slate-600">
           Showing {pagination?.from ?? 0}-{pagination?.to ?? 0} of{" "}
           {pagination?.total ?? 0}

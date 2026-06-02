@@ -161,6 +161,6 @@ class ProjectTaskAuthorizationTest extends TestCase
 
         $deleteResponse = $this->deleteJson("/api/projects/{$project->id}/tasks/{$task->id}");
         $deleteResponse->assertOk();
-        $this->assertDatabaseMissing('tasks', ['id' => $task->id]);
+        $this->assertSoftDeleted('tasks', ['id' => $task->id]);
     }
 }

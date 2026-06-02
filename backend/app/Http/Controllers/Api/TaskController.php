@@ -20,6 +20,7 @@ class TaskController extends Controller
 
         $tasks = Task::query()
             ->where('project_id', $project->id)
+            ->whereNull('archived_at')
             ->when($status, fn ($q) => $q->where('status', $status))
             ->when($search, function ($q, $search) {
                 $q->where(function ($qq) use ($search) {

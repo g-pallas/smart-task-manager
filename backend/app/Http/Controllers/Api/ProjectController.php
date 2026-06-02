@@ -25,12 +25,20 @@ class ProjectController extends Controller
                         });
                 });
             })
+            ->whereNull('archived_at')
             ->when($search, function ($query, $search){
                 $query->where(function ($q) use ($search){
                      $q->where('name', 'like', "%{$search}%")
                         ->orWhere('description', 'like', "%{$search}%");
                 });
             })
+            ->withCount([
+                'tasks' => fn ($query) => $query->whereNull('archived_at'),
+                'tasks as completed_tasks_count' => fn ($query) => $query
+                    ->whereNull('archived_at')
+                    ->where('status', 'done'),
+            ])
+            ->withMin(['tasks' => fn ($query) => $query->whereNull('archived_at')], 'due_date')
             ->latest()
             ->paginate(10);
 
@@ -81,6 +89,7 @@ class ProjectController extends Controller
     {
         $this->authorize('delete', $project);
 
+        $project->tasks()->delete();
         $project->delete();
 
         return response()->json(['message' => 'Project deleted']);

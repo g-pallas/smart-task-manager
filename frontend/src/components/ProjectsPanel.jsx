@@ -7,6 +7,7 @@ export default function ProjectsPanel({
   onCreateProject,
   onUpdateProject,
   onDeleteProject,
+  onArchiveProject,
   onSelectProject,
   loading,
   error,
@@ -96,57 +97,39 @@ export default function ProjectsPanel({
     }
   };
 
+  const getProjectProgress = (project) => {
+    const total = project.tasks_count ?? 0;
+    if (!total) return 0;
+    return Math.round(((project.completed_tasks_count ?? 0) / total) * 100);
+  };
+
+  const getProjectState = (project) => {
+    const progress = getProjectProgress(project);
+    const dueDate = project.tasks_min_due_date ? new Date(project.tasks_min_due_date) : null;
+
+    if (dueDate && dueDate < new Date() && progress < 100) return "critical";
+    if (progress > 0 && progress < 100) return "in progress";
+    if (progress === 100) return "done";
+    return "planning";
+  };
+
   return (
-    <section>
-      <div className="mb-5">
-        <p className="section-label">Portfolio</p>
-        <h2 className="panel-heading mt-3">Projects</h2>
-        <p className="panel-subheading mt-2">
-          Capture the workspaces you are actively planning and jump into one
-          with a single click.
-        </p>
+    <section className="project-overview">
+      <div className="section-heading-row">
+        <h2>Project Overview</h2>
+        <button className="text-link" type="button">
+          View All
+        </button>
       </div>
 
       {loading && (
-        <p className="mb-2 text-sm text-slate-500">Loading projects...</p>
+        <p className="inline-status">Loading projects...</p>
       )}
       {error && (
-        <p className="mb-3 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
+        <p className="dashboard-error">{error}</p>
       )}
 
-      <form onSubmit={submit} className="panel-card mb-5 p-5">
-        <input
-          className="app-input"
-          placeholder="Project name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={isCreating}
-          required
-        />
-        {formErrors?.name?.[0] && (
-          <p className="mt-2 text-sm text-red-600">{formErrors.name[0]}</p>
-        )}
-        <textarea
-          className="app-textarea mt-3"
-          placeholder="Description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          disabled={isCreating}
-        />
-        {formErrors?.description?.[0] && (
-          <p className="mt-2 text-sm text-red-600">{formErrors.description[0]}</p>
-        )}
-        <button
-          className="btn btn-primary mt-4 disabled:opacity-60"
-          disabled={isCreating}
-        >
-          {isCreating ? "Creating..." : "Create Project"}
-        </button>
-      </form>
-
-      <div className="space-y-3">
+      <div className="project-list">
         {projects.map((p) => {
           const isRowBusy =
             editingId === p.id || deletingId === p.id || savingId === p.id;
@@ -155,18 +138,20 @@ export default function ProjectsPanel({
             deletingId !== null ||
             savingId !== null ||
             isCreating;
+          const progress = getProjectProgress(p);
+          const projectState = getProjectState(p);
 
           return (
             <div
               key={p.id}
-              className={`project-card p-5 ${
+              className={`project-card dashboard-project-card ${
                 selectedProject?.id === p.id
                   ? "project-card-active"
                   : ""
               }`}
             >
               {editingId === p.id ? (
-                <div className="space-y-2">
+                <div className="edit-stack">
                   <input
                     className="app-input"
                     value={editName}
@@ -193,7 +178,7 @@ export default function ProjectsPanel({
                     </p>
                   )}
 
-                  <div className="flex gap-2">
+                  <div className="action-row">
                     <button
                       type="button"
                       onClick={() => saveEdit(p)}
@@ -217,21 +202,33 @@ export default function ProjectsPanel({
                   <button
                     type="button"
                     onClick={() => onSelectProject(p)}
-                    className="mb-3 w-full text-left"
+                    className="project-card-button"
                     disabled={isRowBusy}
                   >
-                    {selectedProject?.id === p.id && (
-                      <span className="section-label mb-3">Active project</span>
-                    )}
-                    <h3 className="text-lg font-semibold text-slate-900">
-                      {p.name}
-                    </h3>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {p.description}
-                    </p>
+                    <span
+                      className={`project-status-pill project-status-${projectState.replace(" ", "-")}`}
+                    >
+                      {projectState}
+                    </span>
+                    <h3>{p.name}</h3>
+                    <p>{p.description || "Workspace planning and delivery"}</p>
+                    <div className="progress-row">
+                      <span>Progress</span>
+                      <strong>{progress}%</strong>
+                    </div>
+                    <div className="progress-track">
+                      <span
+                        className={
+                          projectState === "critical"
+                            ? "progress-fill progress-fill-alert"
+                            : "progress-fill"
+                        }
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
                   </button>
 
-                  <div className="flex gap-2">
+                  <div className="card-action-row">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -254,6 +251,17 @@ export default function ProjectsPanel({
                     >
                       {deletingId === p.id ? "Deleting..." : "Delete"}
                     </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onArchiveProject(p.id);
+                      }}
+                      className="btn btn-muted px-4 py-2 text-sm disabled:opacity-60"
+                      disabled={isAnyProjectActionBusy}
+                    >
+                      Archive
+                    </button>
                   </div>
                 </>
               )}
@@ -263,14 +271,38 @@ export default function ProjectsPanel({
       </div>
 
       {!loading && projects.length === 0 && (
-        <div className="surface-note mt-4 p-5 text-sm text-slate-600">
-          <p className="font-medium text-slate-800">No projects yet.</p>
-          <p className="mt-1">
-            Create your first project using the form above to start organizing
-            tasks.
-          </p>
+        <div className="empty-dashboard-state">
+          <p>No projects yet.</p>
+          <span>Create your first project below to start organizing tasks.</span>
         </div>
       )}
+
+      <form onSubmit={submit} className="quick-create-form">
+        <input
+          className="app-input"
+          placeholder="Project name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={isCreating}
+          required
+        />
+        {formErrors?.name?.[0] && (
+          <p className="mt-2 text-sm text-red-600">{formErrors.name[0]}</p>
+        )}
+        <textarea
+          className="app-textarea"
+          placeholder="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          disabled={isCreating}
+        />
+        {formErrors?.description?.[0] && (
+          <p className="mt-2 text-sm text-red-600">{formErrors.description[0]}</p>
+        )}
+        <button className="btn btn-primary disabled:opacity-60" disabled={isCreating}>
+          {isCreating ? "Creating..." : "Create Project"}
+        </button>
+      </form>
 
       {projectToDelete && (
         <ConfirmModal
