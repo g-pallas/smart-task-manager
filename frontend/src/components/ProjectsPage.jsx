@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import ConfirmModal from "./ConfirmModal";
+import FaqButton from "./FaqButton";
+import NotificationBell from "./NotificationBell";
 
 const getProgress = (project) => {
   const total = project.tasks_count ?? 0;
@@ -43,6 +45,36 @@ const formatDate = (value) => {
   }).format(new Date(value));
 };
 
+const activityLabels = {
+  project_created: "Project created",
+  project_updated: "Project updated",
+  project_deleted: "Project moved to trash",
+  project_archived: "Project archived",
+  project_restored: "Project restored",
+  project_restored_from_trash: "Project restored from trash",
+  project_permanently_deleted: "Project permanently deleted",
+  task_created: "Task created",
+  task_updated: "Task updated",
+  task_completed: "Task completed",
+  task_reopened: "Task reopened",
+  task_status_changed: "Task status changed",
+  task_deleted: "Task moved to trash",
+  task_archived: "Task archived",
+  task_restored: "Task restored",
+  task_restored_from_trash: "Task restored from trash",
+  task_permanently_deleted: "Task permanently deleted",
+};
+
+const formatActivityTime = (value) => {
+  if (!value) return "";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+};
+
 export default function ProjectsPage({
   projects,
   currentUser,
@@ -54,6 +86,12 @@ export default function ProjectsPage({
   onDeleteProject,
   onArchiveProject,
   onSelectProject,
+  workspaceSummary,
+  onOptimizeSchedule,
+  onUpdatePriority,
+  createRequest,
+  notificationProps,
+  onOpenFaq,
 }) {
   const [search, setSearch] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -66,6 +104,18 @@ export default function ProjectsPage({
   const [savingId, setSavingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [projectToDelete, setProjectToDelete] = useState(null);
+  const [prioritySavingId, setPrioritySavingId] = useState(null);
+  const nameInputRef = useRef(null);
+  const priorityProject = workspaceSummary?.priority_project ?? null;
+  const activities = workspaceSummary?.activities ?? [];
+  const health = workspaceSummary?.health ?? {};
+  const healthTotal = (health.todo ?? 0) + (health.in_progress ?? 0) + (health.done ?? 0);
+
+  useEffect(() => {
+    if (!createRequest) return;
+    setShowCreate(true);
+    window.setTimeout(() => nameInputRef.current?.focus(), 0);
+  }, [createRequest]);
 
   const filteredProjects = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -162,11 +212,8 @@ export default function ProjectsPage({
           />
         </label>
         <div className="topbar-actions">
-          <button className="icon-button notification-dot" type="button" aria-label="Notifications">
-            <svg className="ui-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 0 1-3.4 0" />
-            </svg>
-          </button>
+          <NotificationBell {...notificationProps} />
+          <FaqButton onClick={onOpenFaq} />
           <button className="avatar-button" type="button">
             {(currentUser?.name || currentUser?.email || "U").slice(0, 1).toUpperCase()}
           </button>
@@ -182,6 +229,8 @@ export default function ProjectsPage({
             const state = getProjectState(project);
             const progress = getProgress(project);
             const dueDate = formatDate(project.tasks_min_due_date);
+            const isManualPriority =
+              priorityProject?.source === "manual" && priorityProject.id === project.id;
 
             return (
               <article className="project-page-card" key={project.id}>
@@ -226,6 +275,9 @@ export default function ProjectsPage({
                       <span className={`project-page-status ${state.className}`}>
                         {state.label}
                       </span>
+                      {isManualPriority && (
+                        <span className="project-priority-badge">Priority</span>
+                      )}
                       <span>{getDueLabel(project)}</span>
                     </div>
                     <button
@@ -268,6 +320,25 @@ export default function ProjectsPage({
                       >
                         Archive
                       </button>
+                      <button
+                        className="text-link"
+                        type="button"
+                        disabled={prioritySavingId !== null}
+                        onClick={async () => {
+                          setPrioritySavingId(project.id);
+                          try {
+                            await onUpdatePriority(isManualPriority ? null : project.id);
+                          } finally {
+                            setPrioritySavingId(null);
+                          }
+                        }}
+                      >
+                        {prioritySavingId === project.id
+                          ? "Saving..."
+                          : isManualPriority
+                            ? "Clear Priority"
+                            : "Set Priority"}
+                      </button>
                     </div>
                   </>
                 )}
@@ -285,6 +356,7 @@ export default function ProjectsPage({
           {showCreate && (
             <form className="project-create-card" onSubmit={submitProject}>
               <input
+                ref={nameInputRef}
                 className="app-input"
                 placeholder="Project name"
                 value={name}
@@ -321,50 +393,56 @@ export default function ProjectsPage({
 
         <aside className="project-page-aside">
           <section className="insight-card">
-            <h2>Curator Insights</h2>
-            <p>
-              You have <strong>{Math.min(projects.length, 2)} projects</strong>{" "}
-              in your active workspace. We recommend prioritizing the project
-              with the nearest task due date today.
-            </p>
-            <button type="button">Optimize Schedule</button>
+            <h2>Workspace Priority</h2>
+            {priorityProject ? (
+              <p>
+                Focus on <strong>{priorityProject.name}</strong>.{" "}
+                {priorityProject.overdue_tasks_count > 0
+                  ? `${priorityProject.overdue_tasks_count} overdue task${priorityProject.overdue_tasks_count === 1 ? "" : "s"} need attention.`
+                  : `Its next task is due ${formatDate(priorityProject.next_due_date)}.`}
+              </p>
+            ) : (
+              <p>Create a project with dated tasks to receive a workspace priority.</p>
+            )}
+            <button type="button" onClick={onOptimizeSchedule} disabled={!priorityProject}>
+              Open Priority Project
+            </button>
           </section>
 
           <section className="timeline-card">
             <h2>Activity Timeline</h2>
-            <div className="timeline-list">
-              <div className="timeline-item timeline-blue">
-                <strong>Task Completed</strong>
-                <span>{projects[0]?.name || "Workspace"} activity updated</span>
-                <time>12:45 PM</time>
+            {activities.length ? (
+              <div className="timeline-list">
+                {activities.map((activity, index) => (
+                  <div
+                    className={`timeline-item ${index % 3 === 1 ? "timeline-red" : index % 3 === 2 ? "timeline-indigo" : "timeline-blue"}`}
+                    key={activity.id}
+                  >
+                    <strong>{activityLabels[activity.action] || "Workspace updated"}</strong>
+                    <span>{activity.subject_name} · {activity.actor_name || "User"}</span>
+                    <time>{formatActivityTime(activity.created_at)}</time>
+                  </div>
+                ))}
               </div>
-              <div className="timeline-item timeline-red">
-                <strong>Urgent Alert</strong>
-                <span>{projects.filter((project) => getProjectState(project).label === "Urgent").length} urgent project alerts</span>
-                <time>09:12 AM</time>
-              </div>
-              <div className="timeline-item timeline-indigo">
-                <strong>New Member Added</strong>
-                <span>{projects.length} active projects tracked</span>
-                <time>Yesterday</time>
-              </div>
-            </div>
+            ) : (
+              <p className="timeline-empty">Workspace activity will appear here as you work.</p>
+            )}
           </section>
 
           <section className="health-card">
             <h2>Project Health</h2>
             <div className="health-row">
-              <span>Overall Momentum</span>
-              <strong>+12%</strong>
+              <span>Task completion</span>
+              <strong>{healthTotal ? Math.round(((health.done ?? 0) / healthTotal) * 100) : 0}%</strong>
             </div>
             <div className="health-meter">
-              <span />
-              <span />
-              <span />
+              <span style={{ flex: health.done || 0 }} title={`${health.done ?? 0} done`} />
+              <span style={{ flex: health.in_progress || 0 }} title={`${health.in_progress ?? 0} in progress`} />
+              <span style={{ flex: health.todo || 0 }} title={`${health.todo ?? 0} to do`} />
             </div>
             <p>
-              Momentum is high. {projects.length || 0} active projects are
-              tracking across your workspace.
+              {health.done ?? 0} done, {health.in_progress ?? 0} in progress,{" "}
+              {health.todo ?? 0} to do, and {health.overdue ?? 0} overdue.
             </p>
           </section>
         </aside>

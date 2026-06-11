@@ -15,8 +15,6 @@ const LockIcon = () => (
   </svg>
 );
 
-const GoogleMark = () => <span className="google-mark">G</span>;
-
 export default function LoginForm({
   onLogin,
   onSwitchToRegister,
@@ -77,11 +75,6 @@ export default function LoginForm({
           className="btn auth-submit disabled:cursor-not-allowed"
         >
           {loading ? "Signing in..." : "Login"}
-        </button>
-        <div className="auth-divider"><span>OR</span></div>
-        <button className="auth-google-button" type="button">
-          <GoogleMark />
-          Login with Google
         </button>
         <button
           type="button"

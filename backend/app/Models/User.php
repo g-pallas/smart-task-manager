@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -19,6 +20,7 @@ class User extends Authenticatable
         'password',
         'role',
         'preferences',
+        'priority_project_id',
     ];
 
     protected $hidden = [
@@ -40,6 +42,11 @@ class User extends Authenticatable
         return $this->hasMany(CalendarEvent::class);
     }
 
+    public function priorityProject(): BelongsTo
+    {
+        return $this->belongsTo(Project::class, 'priority_project_id');
+    }
+
     public function isAdmin(): bool
     {
         return $this->role === 'admin';
@@ -58,5 +65,10 @@ class User extends Authenticatable
     public function assignedTasks(): HasMany
     {
         return $this->hasMany(Task::class, 'assigned_to');
+    }
+
+    public function workspaceActivities(): HasMany
+    {
+        return $this->hasMany(WorkspaceActivity::class);
     }
 }

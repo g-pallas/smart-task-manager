@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\Task;
+use App\Services\WorkspaceActivityRecorder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -50,7 +51,9 @@ class TaskController extends Controller
             ...$data,
             'project_id' => $project->id,
             'status' => $data['status'] ?? 'todo',
+            'completed_at' => ($data['status'] ?? 'todo') === 'done' ? now() : null,
         ]);
+        WorkspaceActivityRecorder::task($request->user(), $task, 'task_created');
 
         return response()->json($task, 201);
     }
@@ -68,7 +71,27 @@ class TaskController extends Controller
             'assigned_to' => ['nullable', 'exists:users,id'],
         ]);
 
+        $previousStatus = $task->status;
+        $nextStatus = $data['status'] ?? $previousStatus;
+
+        if ($nextStatus === 'done' && $previousStatus !== 'done') {
+            $data['completed_at'] = now();
+        } elseif ($nextStatus !== 'done' && $previousStatus === 'done') {
+            $data['completed_at'] = null;
+        }
+
         $task->update($data);
+
+        $action = match (true) {
+            $previousStatus !== 'done' && $nextStatus === 'done' => 'task_completed',
+            $previousStatus === 'done' && $nextStatus !== 'done' => 'task_reopened',
+            $previousStatus !== $nextStatus => 'task_status_changed',
+            default => 'task_updated',
+        };
+        WorkspaceActivityRecorder::task($request->user(), $task, $action, [
+            'previous_status' => $previousStatus,
+            'status' => $nextStatus,
+        ]);
 
         return response()->json($task);
     }
@@ -78,6 +101,7 @@ class TaskController extends Controller
         abort_unless($task->project_id === $project->id, 404);
         $this->authorize('delete', $task);
 
+        WorkspaceActivityRecorder::task($request->user(), $task, 'task_deleted');
         $task->delete();
 
         return response()->json(['message' => 'Task deleted']);

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Project;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -43,14 +44,39 @@ class SettingsController extends Controller
     {
         $data = $request->validate([
             'desktop_notifications' => ['required', 'boolean'],
-            'dark_mode' => ['required', 'boolean'],
-            'ai_suggestions' => ['required', 'boolean'],
         ]);
 
         $request->user()->update(['preferences' => $data]);
 
         return response()->json([
             'preferences' => $data,
+        ]);
+    }
+
+    public function updatePriorityProject(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => ['nullable', 'integer'],
+        ]);
+
+        $project = null;
+
+        if ($data['project_id'] ?? null) {
+            $project = Project::query()
+                ->whereNull('archived_at')
+                ->findOrFail($data['project_id']);
+            $this->authorize('view', $project);
+        }
+
+        $request->user()->update([
+            'priority_project_id' => $project?->id,
+        ]);
+
+        return response()->json([
+            'priority_project' => $project ? [
+                'id' => $project->id,
+                'name' => $project->name,
+            ] : null,
         ]);
     }
 }

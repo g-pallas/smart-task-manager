@@ -12,6 +12,8 @@ export default function ProjectsPanel({
   loading,
   error,
   formErrors,
+  priorityProject,
+  onUpdatePriority,
 }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -23,6 +25,7 @@ export default function ProjectsPanel({
   const [savingId, setSavingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
   const [projectToDelete, setProjectToDelete] = useState(null);
+  const [prioritySavingId, setPrioritySavingId] = useState(null);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -140,6 +143,8 @@ export default function ProjectsPanel({
             isCreating;
           const progress = getProjectProgress(p);
           const projectState = getProjectState(p);
+          const isManualPriority =
+            priorityProject?.source === "manual" && priorityProject.id === p.id;
 
           return (
             <div
@@ -210,6 +215,9 @@ export default function ProjectsPanel({
                     >
                       {projectState}
                     </span>
+                    {isManualPriority && (
+                      <span className="project-priority-badge">Priority</span>
+                    )}
                     <h3>{p.name}</h3>
                     <p>{p.description || "Workspace planning and delivery"}</p>
                     <div className="progress-row">
@@ -261,6 +269,26 @@ export default function ProjectsPanel({
                       disabled={isAnyProjectActionBusy}
                     >
                       Archive
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-muted px-4 py-2 text-sm disabled:opacity-60"
+                      disabled={isAnyProjectActionBusy || prioritySavingId !== null}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        setPrioritySavingId(p.id);
+                        try {
+                          await onUpdatePriority(isManualPriority ? null : p.id);
+                        } finally {
+                          setPrioritySavingId(null);
+                        }
+                      }}
+                    >
+                      {prioritySavingId === p.id
+                        ? "Saving..."
+                        : isManualPriority
+                          ? "Clear Priority"
+                          : "Set Priority"}
                     </button>
                   </div>
                 </>

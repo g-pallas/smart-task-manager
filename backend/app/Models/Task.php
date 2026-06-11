@@ -17,6 +17,7 @@ class Task extends Model
         'description',
         'due_date',
         'status',
+        'completed_at',
         'assigned_to',
         'archived_at',
     ];
@@ -25,6 +26,7 @@ class Task extends Model
     {
         return [
             'due_date' => 'date',
+            'completed_at' => 'datetime',
             'archived_at' => 'datetime',
         ];
     }

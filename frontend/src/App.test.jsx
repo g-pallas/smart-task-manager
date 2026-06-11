@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 import api, { setUnauthorizedHandler } from "./lib/api";
@@ -37,6 +37,12 @@ const calendarItems = [
     project_id: 1,
     project_name: "Roadmap App",
   },
+  {
+    id: 12,
+    type: "event",
+    title: "Legacy Manual Event",
+    starts_at: "2026-06-10T09:00:00.000000Z",
+  },
 ];
 
 const archiveItems = [
@@ -61,6 +67,49 @@ const trashItems = [
   },
 ];
 
+const workspaceSummary = {
+  metrics: {
+    active_projects: 3,
+    projects_created_this_week: 1,
+    tasks_completed_this_week: 4,
+    previous_four_week_average: 2.5,
+    due_today: 2,
+    overdue: 1,
+  },
+  priority_project: {
+    id: 1,
+    name: "Roadmap App",
+    overdue_tasks_count: 1,
+    next_due_date: "2026-06-10",
+    source: "automatic",
+  },
+  health: {
+    todo: 2,
+    in_progress: 1,
+    done: 4,
+    overdue: 1,
+  },
+  activities: [
+    {
+      id: 1,
+      action: "task_completed",
+      subject_name: "Review backlog",
+      actor_name: "Test User",
+      created_at: "2026-06-11T10:00:00Z",
+    },
+  ],
+  notification_tasks: [
+    {
+      id: 11,
+      title: "Review backlog",
+      due_date: "2026-06-10",
+      project_id: 1,
+      project_name: "Roadmap App",
+      is_overdue: true,
+    },
+  ],
+};
+
 function mockAuthenticatedGet() {
   api.get.mockImplementation((url) => {
     if (url === "/me") {
@@ -70,15 +119,16 @@ function mockAuthenticatedGet() {
           name: "Test User",
           email: "test@example.com",
           preferences: {
-            desktop_notifications: true,
-            dark_mode: false,
-            ai_suggestions: true,
+            desktop_notifications: false,
           },
         },
       });
     }
     if (url === "/projects") {
       return Promise.resolve({ data: { data: [project] } });
+    }
+    if (url === "/workspace-summary") {
+      return Promise.resolve({ data: workspaceSummary });
     }
     if (url === "/calendar-events") {
       return Promise.resolve({ data: { data: calendarItems } });
@@ -109,6 +159,14 @@ describe("App integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    class NotificationMock {
+      static permission = "default";
+      static requestPermission = vi.fn().mockResolvedValue("granted");
+    }
+    Object.defineProperty(window, "Notification", {
+      configurable: true,
+      value: NotificationMock,
+    });
     mockAuthenticatedGet();
   });
 
@@ -175,14 +233,12 @@ describe("App integration", () => {
     expect(await screen.findByRole("heading", { name: /welcome back/i })).toBeInTheDocument();
   });
 
-  it("updates settings preferences", async () => {
+  it("enables desktop notifications and removes placeholder preferences", async () => {
     localStorage.setItem("token", "existing-token");
     api.put.mockResolvedValueOnce({
       data: {
         preferences: {
           desktop_notifications: true,
-          dark_mode: true,
-          ai_suggestions: true,
         },
       },
     });
@@ -190,38 +246,119 @@ describe("App integration", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: /settings/i }));
-    await userEvent.click(screen.getByLabelText(/dark mode/i));
+    await userEvent.click(screen.getByLabelText(/desktop notifications/i));
 
     await waitFor(() => {
       expect(api.put).toHaveBeenCalledWith("/me/preferences", {
         desktop_notifications: true,
-        dark_mode: true,
-        ai_suggestions: true,
       });
     });
+    expect(Notification.requestPermission).toHaveBeenCalled();
+    expect(screen.queryByLabelText(/dark mode/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/ai suggestions/i)).not.toBeInTheDocument();
   });
 
-  it("creates a calendar event", async () => {
+  it("renders workspace metrics from the summary API", async () => {
     localStorage.setItem("token", "existing-token");
-    api.post.mockResolvedValueOnce({ data: { id: 5, title: "Planning Review" } });
+
+    render(<App />);
+
+    const activeProjects = await screen.findByText("Active Projects");
+    expect(within(activeProjects.closest("article")).getByText("3")).toBeInTheDocument();
+    expect(screen.getByText("+1 this week")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText(/vs 2\.5 weekly avg/i)).toBeInTheDocument();
+    expect(screen.getByText("Due Today")).toBeInTheDocument();
+    expect(screen.queryByText(/hours tracked/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/72% avg/i)).not.toBeInTheDocument();
+  });
+
+  it("opens a critical task from the notification bell", async () => {
+    localStorage.setItem("token", "existing-token");
+
+    render(<App />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /notifications \(1 urgent\)/i }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /review backlog/i }));
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/projects/1/tasks", {
+        params: { page: 1 },
+      });
+    });
+    expect(await screen.findByText(/good morning/i)).toBeInTheDocument();
+  });
+
+  it("opens the FAQ page from the shared help button", async () => {
+    localStorage.setItem("token", "existing-token");
+
+    render(<App />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /frequently asked questions/i }),
+    );
+    expect(
+      await screen.findByRole("heading", { name: /frequently asked questions/i }),
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /how do i create a project/i }),
+    );
+    expect(
+      screen.getByText(/select new project from the sidebar/i),
+    ).toBeInTheDocument();
+
+    await userEvent.type(
+      screen.getByPlaceholderText(/search frequently asked questions/i),
+      "desktop notifications",
+    );
+    expect(
+      screen.getByRole("button", { name: /how do i enable desktop notifications/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /how do i create a project/i }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /projects/i }));
+    expect(
+      await screen.findByRole("button", { name: /frequently asked questions/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("opens the calculated priority project and shows real activity", async () => {
+    localStorage.setItem("token", "existing-token");
+
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /projects/i }));
+    expect(await screen.findByText("Workspace Priority")).toBeInTheDocument();
+    expect(screen.getByText("Task completed")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /open priority project/i }));
+
+    await waitFor(() => {
+      expect(api.get).toHaveBeenCalledWith("/projects/1/tasks", {
+        params: { page: 1 },
+      });
+    });
+    expect(await screen.findByText(/good morning/i)).toBeInTheDocument();
+  });
+
+  it("switches calendar ranges and displays task-derived entries only", async () => {
+    localStorage.setItem("token", "existing-token");
 
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: /calendar/i }));
-    await userEvent.click(screen.getByRole("button", { name: /\+ new event/i }));
-    await userEvent.type(screen.getByPlaceholderText(/event title/i), "Planning Review");
-    await userEvent.click(screen.getByRole("button", { name: /create event/i }));
+    expect(await screen.findByText("Review backlog")).toBeInTheDocument();
+    expect(screen.queryByText("Legacy Manual Event")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /\+ new event/i })).not.toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(api.post).toHaveBeenCalledWith("/calendar-events", {
-        title: "Planning Review",
-        description: null,
-        starts_at: expect.stringMatching(/T09:00:00$/),
-        ends_at: null,
-        project_id: null,
-        color: "indigo",
-      });
-    });
+    await userEvent.click(screen.getByRole("button", { name: /^week$/i }));
+    expect(screen.getByRole("button", { name: /previous week/i })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /^day$/i }));
+    expect(screen.getByRole("button", { name: /next day/i })).toBeInTheDocument();
   });
 
   it("restores an archived item", async () => {
@@ -231,7 +368,7 @@ describe("App integration", () => {
     render(<App />);
 
     await userEvent.click(await screen.findByRole("button", { name: /archive/i }));
-    await userEvent.click(await screen.findByRole("button", { name: /restore archived project/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /^restore$/i }));
 
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith("/projects/2/restore-archive");
@@ -246,9 +383,52 @@ describe("App integration", () => {
 
     await userEvent.click(await screen.findByRole("button", { name: /trash/i }));
     await userEvent.click(screen.getByRole("button", { name: /empty trash/i }));
+    await userEvent.click(screen.getAllByRole("button", { name: /empty trash/i }).at(-1));
 
     await waitFor(() => {
       expect(api.post).toHaveBeenCalledWith("/trash/empty");
+    });
+  });
+
+  it("opens and focuses the project form from the global New Project button", async () => {
+    localStorage.setItem("token", "existing-token");
+
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /\+ new project/i }));
+    const input = await screen.findByPlaceholderText("Project name");
+    expect(input).toHaveFocus();
+  });
+
+  it("sets a personal priority from the dashboard", async () => {
+    localStorage.setItem("token", "existing-token");
+    api.put.mockResolvedValueOnce({
+      data: { priority_project: { id: 1, name: "Roadmap App" } },
+    });
+
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /set priority/i }));
+
+    await waitFor(() => {
+      expect(api.put).toHaveBeenCalledWith("/me/priority-project", {
+        project_id: 1,
+      });
+    });
+  });
+
+  it("moves an archived item to trash after confirmation", async () => {
+    localStorage.setItem("token", "existing-token");
+    api.post.mockResolvedValueOnce({ data: { message: "moved" } });
+
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /archive/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /move to trash/i }));
+    await userEvent.click(screen.getAllByRole("button", { name: /move to trash/i }).at(-1));
+
+    await waitFor(() => {
+      expect(api.post).toHaveBeenCalledWith("/archive/projects/2/trash");
     });
   });
 });

@@ -22,8 +22,6 @@ const LockIcon = () => (
   </svg>
 );
 
-const GoogleMark = () => <span className="google-mark">G</span>;
-
 export default function RegisterForm({
   onRegister,
   formErrors = {},
@@ -119,12 +117,6 @@ export default function RegisterForm({
         >
           {loading ? "Creating account..." : "Create Account"}
         </button>
-        <div className="auth-divider auth-divider-wide"><span>OR SIGN UP WITH</span></div>
-        <button className="auth-google-button" type="button">
-          <GoogleMark />
-          Google
-        </button>
-
         <button
           type="button"
           onClick={onSwitchToLogin}

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
+import FaqButton from "./FaqButton";
+import NotificationBell from "./NotificationBell";
 
 const defaultPreferences = {
-  desktop_notifications: true,
-  dark_mode: false,
-  ai_suggestions: true,
+  desktop_notifications: false,
 };
 
 export default function SettingsPage({
@@ -12,6 +12,8 @@ export default function SettingsPage({
   onUpdateProfile,
   onUpdatePassword,
   onUpdatePreferences,
+  notificationProps,
+  onOpenFaq,
 }) {
   const displayName = currentUser?.name || "User";
   const email = currentUser?.email || "user@example.com";
@@ -65,7 +67,12 @@ export default function SettingsPage({
   const togglePreference = async (key) => {
     const next = { ...preferences, [key]: !preferences[key] };
     setPreferences(next);
-    await onUpdatePreferences(next);
+    try {
+      const saved = await onUpdatePreferences(next);
+      if (saved) setPreferences(saved);
+    } catch {
+      setPreferences(preferences);
+    }
   };
 
   return (
@@ -78,11 +85,8 @@ export default function SettingsPage({
           <input placeholder="Search settings..." />
         </label>
         <div className="topbar-actions">
-          <button className="icon-button" type="button" aria-label="Notifications">
-            <svg className="ui-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 0 1-3.4 0" />
-            </svg>
-          </button>
+          <NotificationBell {...notificationProps} />
+          <FaqButton onClick={onOpenFaq} />
           <button className="avatar-button" type="button">
             {displayName.slice(0, 1).toUpperCase()}
           </button>
@@ -159,20 +163,17 @@ export default function SettingsPage({
             <p>Customize your workspace environment.</p>
           </div>
           <div className="experience-card">
-            {[
-              ["desktop_notifications", "Desktop Notifications"],
-              ["dark_mode", "Dark Mode"],
-              ["ai_suggestions", "AI Suggestions"],
-            ].map(([key, label]) => (
-              <label className="experience-row" key={key}>
-                <span>{label}</span>
-                <input
-                  type="checkbox"
-                  checked={Boolean(preferences[key])}
-                  onChange={() => togglePreference(key)}
-                />
-              </label>
-            ))}
+            <label className="experience-row">
+              <span>Desktop Notifications</span>
+              <input
+                type="checkbox"
+                checked={Boolean(preferences.desktop_notifications)}
+                onChange={() => togglePreference("desktop_notifications")}
+              />
+            </label>
+            <p className="experience-note">
+              Your device theme controls light and dark appearance automatically.
+            </p>
           </div>
         </section>
       </div>

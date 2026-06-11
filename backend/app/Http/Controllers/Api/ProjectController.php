@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Project;
+use App\Services\WorkspaceActivityRecorder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -60,6 +61,7 @@ class ProjectController extends Controller
         ]);
 
         $project->members()->attach($request->user()->id);
+        WorkspaceActivityRecorder::project($request->user(), $project, 'project_created');
 
         return response()->json($project, 201);
     }
@@ -81,6 +83,7 @@ class ProjectController extends Controller
         ]);
 
         $project->update($data);
+        WorkspaceActivityRecorder::project($request->user(), $project, 'project_updated');
 
         return response()->json($project);
     }
@@ -89,6 +92,7 @@ class ProjectController extends Controller
     {
         $this->authorize('delete', $project);
 
+        WorkspaceActivityRecorder::project($request->user(), $project, 'project_deleted');
         $project->tasks()->delete();
         $project->delete();
 

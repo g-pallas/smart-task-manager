@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Project;
 use App\Models\Task;
+use App\Services\WorkspaceActivityRecorder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -14,8 +15,11 @@ class TrashController extends Controller
     {
         $user = $request->user();
         $search = $request->query('search');
+        $type = $request->query('type', 'all');
 
-        $projects = Project::onlyTrashed()
+        $projects = collect();
+        if (in_array($type, ['all', 'project'], true)) {
+            $projects = Project::onlyTrashed()
             ->when(! $user->isAdmin(), fn ($query) => $this->scopeProjectsToUser($query, $user))
             ->when($search, fn ($query, $search) => $query->where('name', 'like', "%{$search}%"))
             ->latest('deleted_at')
@@ -25,10 +29,12 @@ class TrashController extends Controller
                 'type' => 'project',
                 'title' => $project->name,
                 'deleted_at' => $project->deleted_at,
-                'expires_at' => $project->deleted_at?->copy()->addDays(30),
             ]);
+        }
 
-        $tasks = Task::onlyTrashed()
+        $tasks = collect();
+        if (in_array($type, ['all', 'task'], true)) {
+            $tasks = Task::onlyTrashed()
             ->with(['project' => fn ($query) => $query->withTrashed()])
             ->when(! $user->isAdmin(), fn ($query) => $query->whereHas('project', fn ($projectQuery) => $this->scopeProjectsToUser($projectQuery, $user)))
             ->when($search, fn ($query, $search) => $query->where('title', 'like', "%{$search}%"))
@@ -39,10 +45,10 @@ class TrashController extends Controller
                 'type' => 'task',
                 'title' => $task->title,
                 'deleted_at' => $task->deleted_at,
-                'expires_at' => $task->deleted_at?->copy()->addDays(30),
                 'project_id' => $task->project_id,
                 'project_name' => $task->project?->name,
             ]);
+        }
 
         return response()->json([
             'data' => $projects->concat($tasks)->sortByDesc('deleted_at')->values(),
@@ -56,6 +62,7 @@ class TrashController extends Controller
 
         $project->restore();
         Task::onlyTrashed()->where('project_id', $project->id)->restore();
+        WorkspaceActivityRecorder::project($request->user(), $project, 'project_restored_from_trash');
 
         return response()->json(['message' => 'Project restored']);
     }
@@ -65,6 +72,7 @@ class TrashController extends Controller
         $project = Project::onlyTrashed()->findOrFail($project);
         $this->authorize('delete', $project);
 
+        WorkspaceActivityRecorder::project($request->user(), $project, 'project_permanently_deleted');
         Task::withTrashed()->where('project_id', $project->id)->forceDelete();
         $project->forceDelete();
 
@@ -80,6 +88,7 @@ class TrashController extends Controller
             $task->project->restore();
         }
         $task->restore();
+        WorkspaceActivityRecorder::task($request->user(), $task, 'task_restored_from_trash');
 
         return response()->json(['message' => 'Task restored']);
     }
@@ -89,6 +98,7 @@ class TrashController extends Controller
         $task = Task::onlyTrashed()->with(['project' => fn ($query) => $query->withTrashed()])->findOrFail($task);
         $this->authorize('delete', $task);
 
+        WorkspaceActivityRecorder::task($request->user(), $task, 'task_permanently_deleted');
         $task->forceDelete();
 
         return response()->json(['message' => 'Task permanently deleted']);
@@ -97,11 +107,15 @@ class TrashController extends Controller
     public function empty(Request $request): JsonResponse
     {
         $items = $this->index($request)->getData(true)['data'] ?? [];
+        $projectIds = collect($items)
+            ->where('type', 'project')
+            ->pluck('id')
+            ->all();
 
         foreach ($items as $item) {
             if ($item['type'] === 'project') {
                 $this->forceDeleteProject($request, $item['id']);
-            } else {
+            } elseif (! in_array($item['project_id'] ?? null, $projectIds, true)) {
                 $this->forceDeleteTask($request, $item['id']);
             }
         }

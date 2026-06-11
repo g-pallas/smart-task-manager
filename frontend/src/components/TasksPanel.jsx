@@ -187,7 +187,7 @@ export default function TasksPanel({
     return (
       <section className="today-panel">
         <div className="section-heading-row">
-          <h2>Today&apos;s Tasks</h2>
+          <h2>Tasks</h2>
           <button className="dots-button" type="button" aria-label="More task options">
             ...
           </button>
@@ -203,7 +203,7 @@ export default function TasksPanel({
   return (
     <section className="today-panel">
       <div className="section-heading-row">
-        <h2>Today&apos;s Tasks</h2>
+        <h2>Tasks</h2>
         <button className="dots-button" type="button" aria-label="More task options">
           ...
         </button>

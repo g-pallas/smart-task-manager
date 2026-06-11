@@ -2,13 +2,41 @@ import { useEffect, useRef, useState } from "react";
 import api, { setUnauthorizedHandler } from "./lib/api";
 import ArchivePage from "./components/ArchivePage";
 import CalendarPage from "./components/CalendarPage";
+import FaqButton from "./components/FaqButton";
+import FaqPage from "./components/FaqPage";
 import LoginForm from "./components/LoginForm";
+import NotificationBell from "./components/NotificationBell";
 import RegisterForm from "./components/RegisterForm";
 import ProjectsPage from "./components/ProjectsPage";
 import ProjectsPanel from "./components/ProjectsPanel";
 import SettingsPage from "./components/SettingsPage";
 import TasksPanel from "./components/TasksPanel";
 import TrashPage from "./components/TrashPage";
+import {
+  NOTIFICATION_OPEN_EVENT,
+  notifyDueTasks,
+  requestDesktopNotificationPermission,
+} from "./lib/desktopNotifications";
+
+const emptyWorkspaceSummary = {
+  metrics: {
+    active_projects: 0,
+    projects_created_this_week: 0,
+    tasks_completed_this_week: 0,
+    previous_four_week_average: 0,
+    due_today: 0,
+    overdue: 0,
+  },
+  priority_project: null,
+  health: {
+    todo: 0,
+    in_progress: 0,
+    done: 0,
+    overdue: 0,
+  },
+  activities: [],
+  notification_tasks: [],
+};
 
 const DashboardIcon = ({ children }) => (
   <svg
@@ -31,6 +59,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [authMode, setAuthMode] = useState("login");
   const [activeView, setActiveView] = useState("dashboard");
+  const [projectCreateRequest, setProjectCreateRequest] = useState(0);
   const [dashboardSearch, setDashboardSearch] = useState("");
   const [authFormErrors, setAuthFormErrors] = useState({});
   const [authLoading, setAuthLoading] = useState(false);
@@ -48,6 +77,7 @@ export default function App() {
   const [archiveItems, setArchiveItems] = useState([]);
   const [trashItems, setTrashItems] = useState([]);
   const [settingsErrors, setSettingsErrors] = useState({});
+  const [workspaceSummary, setWorkspaceSummary] = useState(emptyWorkspaceSummary);
   const [toast, setToast] = useState({ message: "", type: "success" });
   const toastTimeoutRef = useRef(null);
   const [taskPagination, setTaskPagination] = useState({
@@ -71,6 +101,7 @@ export default function App() {
       setCalendarItems([]);
       setArchiveItems([]);
       setTrashItems([]);
+      setWorkspaceSummary(emptyWorkspaceSummary);
       setTaskPagination({
         currentPage: 1,
         lastPage: 1,
@@ -118,8 +149,26 @@ export default function App() {
       loadCalendarItems();
       loadArchiveItems();
       loadTrashItems();
+      loadWorkspaceSummary();
     }
   }, [token]);
+
+  useEffect(() => {
+    if (!token || !currentUser?.preferences?.desktop_notifications) return undefined;
+
+    const sendNotifications = () => {
+      notifyDueTasks(workspaceSummary.notification_tasks ?? [], currentUser.id);
+    };
+
+    sendNotifications();
+    window.addEventListener("focus", sendNotifications);
+    return () => window.removeEventListener("focus", sendNotifications);
+  }, [
+    token,
+    currentUser?.id,
+    currentUser?.preferences?.desktop_notifications,
+    workspaceSummary.notification_tasks,
+  ]);
 
   const loadCurrentUser = async () => {
     try {
@@ -148,7 +197,7 @@ export default function App() {
   const loadCalendarItems = async (params = {}) => {
     try {
       const res = await api.get("/calendar-events", { params });
-      setCalendarItems(res.data.data ?? []);
+      setCalendarItems((res.data.data ?? []).filter((item) => item.type === "task"));
     } catch {
       setCalendarItems([]);
     }
@@ -169,6 +218,26 @@ export default function App() {
       setTrashItems(res.data.data ?? []);
     } catch {
       setTrashItems([]);
+    }
+  };
+
+  const loadWorkspaceSummary = async () => {
+    try {
+      const res = await api.get("/workspace-summary");
+      setWorkspaceSummary({
+        ...emptyWorkspaceSummary,
+        ...(res.data ?? {}),
+        metrics: {
+          ...emptyWorkspaceSummary.metrics,
+          ...(res.data?.metrics ?? {}),
+        },
+        health: {
+          ...emptyWorkspaceSummary.health,
+          ...(res.data?.health ?? {}),
+        },
+      });
+    } catch {
+      setWorkspaceSummary(emptyWorkspaceSummary);
     }
   };
 
@@ -256,6 +325,7 @@ export default function App() {
       setCalendarItems([]);
       setArchiveItems([]);
       setTrashItems([]);
+      setWorkspaceSummary(emptyWorkspaceSummary);
       setTaskPagination({
         currentPage: 1,
         lastPage: 1,
@@ -273,6 +343,7 @@ export default function App() {
       await api.post("/projects", { name, description });
       await loadProjects();
       await loadCalendarItems();
+      await loadWorkspaceSummary();
       showToast("Project created.");
       return true;
     } catch (err) {
@@ -290,6 +361,7 @@ export default function App() {
       await api.put(`/projects/${projectId}`, payload);
       await loadProjects();
       await loadCalendarItems();
+      await loadWorkspaceSummary();
 
       if (selectedProject?.id === projectId) {
         setSelectedProject((prev) => (prev ? { ...prev, ...payload } : prev));
@@ -311,6 +383,7 @@ export default function App() {
       await loadProjects();
       await loadTrashItems();
       await loadCalendarItems();
+      await loadWorkspaceSummary();
 
       if (selectedProject?.id === projectId) {
         setSelectedProject(null);
@@ -352,6 +425,7 @@ export default function App() {
       await loadTasks(selectedProject.id, params);
       await loadProjects();
       await loadCalendarItems();
+      await loadWorkspaceSummary();
       showToast("Task created.");
       return true;
     } catch (err) {
@@ -371,6 +445,7 @@ export default function App() {
       await loadTasks(selectedProject.id, params);
       await loadProjects();
       await loadCalendarItems();
+      await loadWorkspaceSummary();
       showToast("Task updated.");
       return { ok: true, fieldErrors: {} };
     } catch (err) {
@@ -391,6 +466,7 @@ export default function App() {
       await loadTasks(selectedProject.id, params);
       await loadProjects();
       await loadCalendarItems();
+      await loadWorkspaceSummary();
       showToast("Task status updated.");
     } catch (err) {
       const message =
@@ -409,6 +485,7 @@ export default function App() {
       await loadProjects();
       await loadTrashItems();
       await loadCalendarItems();
+      await loadWorkspaceSummary();
       showToast("Task deleted.");
     } catch (err) {
       const message = err?.response?.data?.message || "Failed to delete task.";
@@ -422,6 +499,7 @@ export default function App() {
     await loadProjects();
     await loadArchiveItems();
     await loadCalendarItems();
+    await loadWorkspaceSummary();
     showToast("Project archived.");
   };
 
@@ -431,6 +509,7 @@ export default function App() {
     await loadProjects();
     await loadArchiveItems();
     await loadCalendarItems();
+    await loadWorkspaceSummary();
     showToast("Task archived.");
   };
 
@@ -443,7 +522,22 @@ export default function App() {
     await loadProjects();
     await loadArchiveItems();
     await loadCalendarItems();
+    await loadWorkspaceSummary();
     showToast("Archive item restored.");
+  };
+
+  const trashArchiveItem = async (item) => {
+    await api.post(`/archive/${item.type === "project" ? "projects" : "tasks"}/${item.id}/trash`);
+    await loadProjects();
+    await loadArchiveItems();
+    await loadTrashItems();
+    await loadCalendarItems();
+    await loadWorkspaceSummary();
+    if (selectedProject?.id === item.id && item.type === "project") {
+      setSelectedProject(null);
+      setTasks([]);
+    }
+    showToast("Archive item moved to trash.");
   };
 
   const restoreTrashItem = async (item) => {
@@ -451,31 +545,35 @@ export default function App() {
     await loadProjects();
     await loadTrashItems();
     await loadCalendarItems();
+    await loadWorkspaceSummary();
     showToast("Trash item restored.");
   };
 
   const permanentlyDeleteTrashItem = async (item) => {
     await api.delete(`/trash/${item.type === "project" ? "projects" : "tasks"}/${item.id}`);
     await loadTrashItems();
+    await loadWorkspaceSummary();
     showToast("Item permanently deleted.");
   };
 
   const emptyTrash = async () => {
     await api.post("/trash/empty");
     await loadTrashItems();
+    await loadWorkspaceSummary();
     showToast("Trash emptied.");
   };
 
-  const createCalendarEvent = async (payload) => {
-    await api.post("/calendar-events", payload);
-    await loadCalendarItems();
-    showToast("Event created.");
-  };
-
-  const deleteCalendarEvent = async (eventId) => {
-    await api.delete(`/calendar-events/${eventId}`);
-    await loadCalendarItems();
-    showToast("Event deleted.");
+  const updatePriorityProject = async (projectId) => {
+    try {
+      await api.put("/me/priority-project", { project_id: projectId });
+      setCurrentUser((previous) => previous ? { ...previous, priority_project_id: projectId } : previous);
+      await loadWorkspaceSummary();
+      showToast(projectId ? "Priority project updated." : "Priority project cleared.");
+      return true;
+    } catch (err) {
+      showToast(err?.response?.data?.message || "Failed to update priority project.", "error");
+      return false;
+    }
   };
 
   const updateProfile = async (payload) => {
@@ -506,9 +604,27 @@ export default function App() {
   };
 
   const updatePreferences = async (preferences) => {
-    const res = await api.put("/me/preferences", preferences);
-    setCurrentUser((prev) => (prev ? { ...prev, preferences: res.data.preferences } : prev));
-    showToast("Preferences saved.");
+    try {
+      let desktopNotifications = Boolean(preferences.desktop_notifications);
+
+      if (desktopNotifications) {
+        desktopNotifications = await requestDesktopNotificationPermission();
+        if (!desktopNotifications) {
+          showToast("Desktop notification permission was not granted.", "error");
+        }
+      }
+
+      const payload = { desktop_notifications: desktopNotifications };
+      const res = await api.put("/me/preferences", payload);
+      setCurrentUser((prev) => (prev ? { ...prev, preferences: res.data.preferences } : prev));
+      if (desktopNotifications || !preferences.desktop_notifications) {
+        showToast("Preferences saved.");
+      }
+      return res.data.preferences;
+    } catch (err) {
+      showToast(err?.response?.data?.message || "Failed to save preferences.", "error");
+      throw err;
+    }
   };
 
   const toastNode = toast.message ? (
@@ -524,13 +640,54 @@ export default function App() {
   ) : null;
 
   const userName = currentUser?.name || currentUser?.email || "there";
-  const totalTasks = projects.reduce((sum, project) => sum + (project.tasks_count ?? 0), 0);
-  const completedTasks = projects.reduce((sum, project) => sum + (project.completed_tasks_count ?? 0), 0);
-  const urgentTasks = calendarItems.filter((item) => item.type === "task" && item.status !== "done").length;
-  const taskVelocity = totalTasks
-    ? Math.round((completedTasks / totalTasks) * 100)
-    : 0;
-  const hoursTracked = (projects.length * 4.5 + totalTasks * 1.25).toFixed(1);
+  const metrics = workspaceSummary.metrics;
+  const urgentTasks = metrics.overdue;
+  const optimizeSchedule = async () => {
+    const priority = workspaceSummary.priority_project;
+    if (!priority) return;
+
+    setActiveView("dashboard");
+    await selectProject(priority);
+    showToast(
+      priority.overdue_tasks_count > 0
+        ? `Opened ${priority.name}: ${priority.overdue_tasks_count} overdue task${priority.overdue_tasks_count === 1 ? "" : "s"}.`
+        : `Opened ${priority.name}, your next project with a due task.`,
+    );
+  };
+  const openNotificationTask = async (task) => {
+    const projectId = task.project_id ?? task.projectId;
+    if (!projectId) return;
+
+    const project =
+      projects.find((item) => item.id === projectId) ?? {
+        id: projectId,
+        name: task.project_name || "Project",
+      };
+    setActiveView("dashboard");
+    await selectProject(project);
+  };
+  const openProjectCreator = () => {
+    setActiveView("projects");
+    setProjectCreateRequest((value) => value + 1);
+  };
+
+  useEffect(() => {
+    const openFromDesktopNotification = (event) => {
+      openNotificationTask(event.detail ?? {});
+    };
+    window.addEventListener(NOTIFICATION_OPEN_EVENT, openFromDesktopNotification);
+    return () =>
+      window.removeEventListener(NOTIFICATION_OPEN_EVENT, openFromDesktopNotification);
+  });
+
+  const notificationProps = {
+    tasks: workspaceSummary.notification_tasks ?? [],
+    desktopEnabled: Boolean(currentUser?.preferences?.desktop_notifications),
+    onOpenTask: openNotificationTask,
+    onEnableDesktop: () =>
+      updatePreferences({ desktop_notifications: true }),
+  };
+  const openFaq = () => setActiveView("faq");
   const dashboardQuery = dashboardSearch.trim().toLowerCase();
   const dashboardProjects = dashboardQuery
     ? projects.filter((project) =>
@@ -641,9 +798,9 @@ export default function App() {
             <button
               className="btn btn-secondary w-full"
               type="button"
-              onClick={() => setActiveView("projects")}
+              onClick={openProjectCreator}
             >
-              + New {activeView === "projects" ? "Project" : "Task"}
+              + New Project
             </button>
             <div className="archive-links">
               <button
@@ -684,16 +841,20 @@ export default function App() {
               onDeleteProject={deleteProject}
               onArchiveProject={archiveProject}
               onSelectProject={selectProject}
+              workspaceSummary={workspaceSummary}
+              onOptimizeSchedule={optimizeSchedule}
+              onUpdatePriority={updatePriorityProject}
+              createRequest={projectCreateRequest}
+              notificationProps={notificationProps}
+              onOpenFaq={openFaq}
             />
           ) : activeView === "calendar" ? (
             <CalendarPage
               items={calendarItems}
-              tasks={tasks}
-              projects={projects}
               currentUser={currentUser}
-              onCreateEvent={createCalendarEvent}
-              onDeleteEvent={deleteCalendarEvent}
               onSearch={loadCalendarItems}
+              notificationProps={notificationProps}
+              onOpenFaq={openFaq}
             />
           ) : activeView === "settings" ? (
             <SettingsPage
@@ -702,13 +863,18 @@ export default function App() {
               onUpdateProfile={updateProfile}
               onUpdatePassword={updatePassword}
               onUpdatePreferences={updatePreferences}
+              notificationProps={notificationProps}
+              onOpenFaq={openFaq}
             />
           ) : activeView === "archive" ? (
             <ArchivePage
               currentUser={currentUser}
               items={archiveItems}
               onRestore={restoreArchiveItem}
+              onMoveToTrash={trashArchiveItem}
               onSearch={loadArchiveItems}
+              notificationProps={notificationProps}
+              onOpenFaq={openFaq}
             />
           ) : activeView === "trash" ? (
             <TrashPage
@@ -717,6 +883,14 @@ export default function App() {
               onPermanentDelete={permanentlyDeleteTrashItem}
               onEmptyTrash={emptyTrash}
               onSearch={loadTrashItems}
+              notificationProps={notificationProps}
+              onOpenFaq={openFaq}
+            />
+          ) : activeView === "faq" ? (
+            <FaqPage
+              currentUser={currentUser}
+              notificationProps={notificationProps}
+              onOpenFaq={openFaq}
             />
           ) : (
             <>
@@ -733,18 +907,8 @@ export default function App() {
               />
             </label>
             <div className="topbar-actions">
-              <button className="icon-button" type="button" aria-label="Notifications">
-                <DashboardIcon>
-                  <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 0 1-3.4 0" />
-                </DashboardIcon>
-              </button>
-              <button className="icon-button" type="button" aria-label="Help">
-                <DashboardIcon>
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M9.1 9a3 3 0 1 1 4.9 2.3c-.9.6-1.5 1.1-1.5 2.2" />
-                  <path d="M12 17h.01" />
-                </DashboardIcon>
-              </button>
+              <NotificationBell {...notificationProps} />
+              <FaqButton onClick={openFaq} />
               <button
                 onClick={logout}
                 className="avatar-button"
@@ -776,30 +940,34 @@ export default function App() {
                   <rect height="6" width="6" x="14" y="14" />
                 </DashboardIcon>
               </div>
-              <p className="metric-value">{projects.length}</p>
-              <span className="metric-delta">+2 this week</span>
+              <p className="metric-value">{metrics.active_projects}</p>
+              <span className="metric-delta">
+                +{metrics.projects_created_this_week} this week
+              </span>
             </article>
             <article className="metric-card">
               <div className="metric-card-head">
-                <span>Task Velocity</span>
+                <span>Tasks Completed</span>
                 <DashboardIcon>
                   <path d="M4 14a8 8 0 0 1 16 0M12 14l4-4M5 18h14" />
                 </DashboardIcon>
               </div>
-              <p className="metric-value">{taskVelocity}%</p>
-              <span className="metric-muted">vs 72% avg</span>
+              <p className="metric-value">{metrics.tasks_completed_this_week}</p>
+              <span className="metric-muted">
+                vs {metrics.previous_four_week_average} weekly avg
+              </span>
             </article>
             <article className="metric-card">
               <div className="metric-card-head">
-                <span>Hours Tracked</span>
+                <span>Due Today</span>
                 <DashboardIcon>
                   <circle cx="12" cy="13" r="8" />
                   <path d="M12 9v4l2.5 2.5" />
                   <path d="M9 2h6" />
                 </DashboardIcon>
               </div>
-              <p className="metric-value">{hoursTracked}</p>
-              <span className="metric-muted">hours</span>
+              <p className="metric-value">{metrics.due_today}</p>
+              <span className="metric-muted">{metrics.overdue} overdue</span>
             </article>
           </section>
 
@@ -815,6 +983,8 @@ export default function App() {
               loading={projectsLoading}
               error={projectsError}
               formErrors={projectFormErrors}
+              priorityProject={workspaceSummary.priority_project}
+              onUpdatePriority={updatePriorityProject}
             />
 
             <TasksPanel

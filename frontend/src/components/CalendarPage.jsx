@@ -1,94 +1,139 @@
 import { useMemo, useState } from "react";
+import FaqButton from "./FaqButton";
+import NotificationBell from "./NotificationBell";
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
-const toDateInput = (date) => date.toISOString().slice(0, 10);
+const startOfDay = (value) => {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
 
-const monthLabel = (date) =>
-  new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(date);
+const addDays = (value, amount) => {
+  const date = new Date(value);
+  date.setDate(date.getDate() + amount);
+  return date;
+};
+
+const startOfWeek = (value) => addDays(startOfDay(value), -value.getDay());
 
 const sameDay = (value, date) => {
   if (!value) return false;
-  const parsed = new Date(value);
-  return parsed.toDateString() === date.toDateString();
+  return startOfDay(value).getTime() === startOfDay(date).getTime();
 };
 
-const buildCalendarDays = (monthDate) => {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const first = new Date(year, month, 1);
-  const start = new Date(first);
-  start.setDate(first.getDate() - first.getDay());
+const buildMonthDays = (anchorDate) => {
+  const first = new Date(anchorDate.getFullYear(), anchorDate.getMonth(), 1);
+  const start = addDays(first, -first.getDay());
 
   return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(start);
-    date.setDate(start.getDate() + index);
+    const date = addDays(start, index);
     return {
       date,
-      muted: date.getMonth() !== month,
-      active: date.toDateString() === new Date().toDateString(),
+      muted: date.getMonth() !== anchorDate.getMonth(),
+      active: sameDay(date, new Date()),
     };
   });
 };
 
+const formatHeader = (date, view) => {
+  if (view === "day") {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(date);
+  }
+
+  if (view === "week") {
+    const start = startOfWeek(date);
+    const end = addDays(start, 6);
+    const startLabel = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+    }).format(start);
+    const endLabel = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(end);
+    return `${startLabel} - ${endLabel}`;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(date);
+};
+
+const taskDateLabel = (value) =>
+  new Intl.DateTimeFormat("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
+
 export default function CalendarPage({
   items = [],
-  projects = [],
   currentUser,
-  onCreateEvent,
-  onDeleteEvent,
   onSearch,
+  notificationProps,
+  onOpenFaq,
 }) {
-  const [monthDate, setMonthDate] = useState(new Date());
+  const [anchorDate, setAnchorDate] = useState(new Date());
+  const [view, setView] = useState("month");
   const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [date, setDate] = useState(toDateInput(new Date()));
-  const [projectId, setProjectId] = useState("");
-  const [saving, setSaving] = useState(false);
 
-  const calendarDays = useMemo(() => buildCalendarDays(monthDate), [monthDate]);
-  const filteredItems = useMemo(() => {
+  const tasks = useMemo(
+    () => items.filter((item) => item.type === "task" && item.starts_at),
+    [items],
+  );
+  const filteredTasks = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter((item) =>
+    if (!query) return tasks;
+    return tasks.filter((item) =>
       `${item.title ?? ""} ${item.description ?? ""} ${item.project_name ?? ""}`
         .toLowerCase()
         .includes(query),
     );
-  }, [items, search]);
+  }, [tasks, search]);
 
-  const priorityTasks = filteredItems
-    .filter((item) => item.type === "task" && item.status !== "done")
-    .slice(0, 3);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    if (saving) return;
-
-    setSaving(true);
-    try {
-      await onCreateEvent({
-        title,
-        description: description || null,
-        starts_at: `${date}T09:00:00`,
-        ends_at: null,
-        project_id: projectId || null,
-        color: "indigo",
-      });
-      setTitle("");
-      setDescription("");
-      setProjectId("");
-      setShowForm(false);
-    } finally {
-      setSaving(false);
+  const visibleDays = useMemo(() => {
+    if (view === "day") {
+      return [{ date: startOfDay(anchorDate), muted: false, active: sameDay(anchorDate, new Date()) }];
     }
-  };
+    if (view === "week") {
+      const start = startOfWeek(anchorDate);
+      return Array.from({ length: 7 }, (_, index) => {
+        const date = addDays(start, index);
+        return { date, muted: false, active: sameDay(date, new Date()) };
+      });
+    }
+    return buildMonthDays(anchorDate);
+  }, [anchorDate, view]);
+
+  const priorityTasks = [...filteredTasks]
+    .filter((item) => item.status !== "done" && startOfDay(item.starts_at) >= startOfDay(new Date()))
+    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))
+    .slice(0, 3);
 
   const runSearch = (value) => {
     setSearch(value);
     onSearch?.({ search: value });
+  };
+
+  const moveRange = (direction) => {
+    if (view === "day") {
+      setAnchorDate((current) => addDays(current, direction));
+    } else if (view === "week") {
+      setAnchorDate((current) => addDays(current, direction * 7));
+    } else {
+      setAnchorDate(
+        (current) => new Date(current.getFullYear(), current.getMonth() + direction, 1),
+      );
+    }
   };
 
   return (
@@ -99,17 +144,14 @@ export default function CalendarPage({
             <path d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
           </svg>
           <input
-            placeholder="Search tasks or events..."
+            placeholder="Search tasks..."
             value={search}
-            onChange={(e) => runSearch(e.target.value)}
+            onChange={(event) => runSearch(event.target.value)}
           />
         </label>
         <div className="topbar-actions">
-          <button className="icon-button notification-dot" type="button" aria-label="Notifications">
-            <svg className="ui-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 0 1-3.4 0" />
-            </svg>
-          </button>
+          <NotificationBell {...notificationProps} />
+          <FaqButton onClick={onOpenFaq} />
           <button className="avatar-button" type="button">
             {(currentUser?.name || currentUser?.email || "U").slice(0, 1).toUpperCase()}
           </button>
@@ -118,80 +160,75 @@ export default function CalendarPage({
 
       <section className="calendar-hero">
         <div>
-          <h1>{monthLabel(monthDate)}</h1>
-          <p>Manage your productivity deadlines and scheduled reviews.</p>
+          <h1>{formatHeader(anchorDate, view)}</h1>
+          <p>Tasks appear automatically on their project due dates.</p>
         </div>
         <div className="calendar-controls">
-          <div className="calendar-view-toggle">
-            <button type="button">Day</button>
-            <button type="button">Week</button>
-            <button className="active" type="button">Month</button>
+          <div className="calendar-view-toggle" aria-label="Calendar view">
+            {["day", "week", "month"].map((option) => (
+              <button
+                className={view === option ? "active" : ""}
+                type="button"
+                onClick={() => setView(option)}
+                key={option}
+              >
+                {option[0].toUpperCase() + option.slice(1)}
+              </button>
+            ))}
           </div>
           <button
             className="calendar-nav-button"
             type="button"
-            aria-label="Previous month"
-            onClick={() => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1))}
+            aria-label={`Previous ${view}`}
+            onClick={() => moveRange(-1)}
           >
             ‹
           </button>
           <button
             className="calendar-nav-button"
             type="button"
-            aria-label="Next month"
-            onClick={() => setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1))}
+            aria-label={`Next ${view}`}
+            onClick={() => moveRange(1)}
           >
             ›
-          </button>
-          <button className="btn btn-secondary calendar-event-button" type="button" onClick={() => setShowForm(true)}>
-            + New Event
           </button>
         </div>
       </section>
 
-      {showForm && (
-        <form className="project-create-card calendar-create-card" onSubmit={submit}>
-          <input className="app-input" placeholder="Event title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          <textarea className="app-textarea" placeholder="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-          <div className="form-grid">
-            <input className="app-input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-            <select className="app-select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">No project</option>
-              {projects.map((project) => (
-                <option value={project.id} key={project.id}>{project.name}</option>
-              ))}
-            </select>
+      <section className={`calendar-grid-card calendar-grid-${view}`}>
+        {view !== "day" && (
+          <div className="calendar-weekdays">
+            {visibleDays.slice(0, 7).map(({ date }) => (
+              <span key={date.toISOString()}>{WEEKDAYS[date.getDay()]}</span>
+            ))}
           </div>
-          <div className="action-row">
-            <button className="btn btn-primary" disabled={saving}>{saving ? "Saving..." : "Create Event"}</button>
-            <button className="btn btn-muted" type="button" onClick={() => setShowForm(false)}>Cancel</button>
-          </div>
-        </form>
-      )}
-
-      <section className="calendar-grid-card">
-        <div className="calendar-weekdays">
-          {WEEKDAYS.map((day) => <span key={day}>{day}</span>)}
-        </div>
-        <div className="calendar-month-grid">
-          {calendarDays.map(({ date: day, muted, active }) => {
-            const dayItems = filteredItems.filter((item) => sameDay(item.starts_at, day));
+        )}
+        <div className={`calendar-month-grid calendar-range-${view}`}>
+          {visibleDays.map(({ date: day, muted, active }) => {
+            const dayTasks = filteredTasks.filter((item) => sameDay(item.starts_at, day));
             return (
               <div className={`calendar-day ${muted ? "calendar-day-muted" : ""} ${active ? "calendar-day-active" : ""}`} key={day.toISOString()}>
-                <span className="calendar-date-number">{day.getDate()}</span>
+                <div className="calendar-date-heading">
+                  <span className="calendar-date-number">{day.getDate()}</span>
+                  {view === "day" && <strong>{taskDateLabel(day)}</strong>}
+                </div>
                 {active && <span className="calendar-pin" />}
                 <div className="calendar-event-list">
-                  {dayItems.map((item) => (
-                    <button
-                      className={`calendar-event calendar-event-${item.type === "task" ? "danger" : "soft"}`}
-                      type="button"
-                      key={`${item.type}-${item.id}`}
-                      onClick={() => item.type === "event" && onDeleteEvent(item.id)}
-                      title={item.type === "event" ? "Click to delete event" : item.title}
+                  {dayTasks.map((task) => (
+                    <div
+                      className={`calendar-event calendar-event-${task.status === "done" ? "soft" : "danger"}`}
+                      key={`task-${task.id}`}
+                      title={`${task.title}${task.project_name ? ` - ${task.project_name}` : ""}`}
                     >
-                      {item.title}
-                    </button>
+                      <strong>{task.title}</strong>
+                      {view !== "month" && (
+                        <span>{task.project_name || "Project task"}</span>
+                      )}
+                    </div>
                   ))}
+                  {!dayTasks.length && view === "day" && (
+                    <div className="calendar-day-empty">No tasks due on this day.</div>
+                  )}
                 </div>
               </div>
             );
@@ -207,7 +244,7 @@ export default function CalendarPage({
               <article className={`priority-card ${index === 0 ? "priority-card-high" : "priority-card-normal"}`} key={task.id}>
                 <span>{index === 0 ? "High Priority" : "Scheduled"}</span>
                 <h3>{task.title}</h3>
-                <p>{task.description || "Due soon"} • Project: {task.project_name || "Personal Manager"}</p>
+                <p>{task.description || taskDateLabel(task.starts_at)} • Project: {task.project_name || "Personal Manager"}</p>
                 <strong>!</strong>
               </article>
             )) : (
@@ -223,8 +260,8 @@ export default function CalendarPage({
           <div className="insight-orb">⌁</div>
           <h2>Workspace Insight</h2>
           <p>
-            You have <strong>{priorityTasks.length} critical deadlines</strong>{" "}
-            approaching in this calendar view.
+            You have <strong>{priorityTasks.length} upcoming deadlines</strong>{" "}
+            in this calendar.
           </p>
         </aside>
       </div>

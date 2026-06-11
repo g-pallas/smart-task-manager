@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\ProjectController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\TrashController;
+use App\Http\Controllers\Api\WorkspaceSummaryController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register']);
@@ -18,12 +19,16 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/me', [SettingsController::class, 'updateProfile']);
     Route::put('/me/password', [SettingsController::class, 'updatePassword']);
     Route::put('/me/preferences', [SettingsController::class, 'updatePreferences']);
+    Route::put('/me/priority-project', [SettingsController::class, 'updatePriorityProject']);
+    Route::get('/workspace-summary', WorkspaceSummaryController::class);
 
     Route::get('/archive', [ArchiveController::class, 'index']);
     Route::post('/projects/{project}/archive', [ArchiveController::class, 'archiveProject']);
     Route::post('/projects/{project}/restore-archive', [ArchiveController::class, 'restoreProject']);
     Route::post('/projects/{project}/tasks/{task}/archive', [ArchiveController::class, 'archiveTask']);
     Route::post('/projects/{project}/tasks/{task}/restore-archive', [ArchiveController::class, 'restoreTask']);
+    Route::post('/archive/projects/{project}/trash', [ArchiveController::class, 'trashProject']);
+    Route::post('/archive/tasks/{task}/trash', [ArchiveController::class, 'trashTask']);
 
     Route::get('/trash', [TrashController::class, 'index']);
     Route::post('/trash/empty', [TrashController::class, 'empty']);

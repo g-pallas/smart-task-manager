@@ -1,10 +1,7 @@
 import { useMemo, useState } from "react";
-
-const daysUntil = (value) => {
-  if (!value) return "Expires later";
-  const days = Math.max(0, Math.ceil((new Date(value) - new Date()) / 86400000));
-  return `Expires in ${days} day${days === 1 ? "" : "s"}`;
-};
+import ConfirmModal from "./ConfirmModal";
+import FaqButton from "./FaqButton";
+import NotificationBell from "./NotificationBell";
 
 const deletedLabel = (value) => {
   if (!value) return "Deleted recently";
@@ -34,19 +31,65 @@ export default function TrashPage({
   onPermanentDelete,
   onEmptyTrash,
   onSearch,
+  notificationProps,
+  onOpenFaq,
 }) {
   const [search, setSearch] = useState("");
+  const [type, setType] = useState("all");
+  const [busyKey, setBusyKey] = useState("");
+  const [error, setError] = useState("");
+  const [pendingAction, setPendingAction] = useState(null);
+
   const filteredItems = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter((item) =>
-      `${item.title ?? ""} ${item.project_name ?? ""}`.toLowerCase().includes(query),
-    );
-  }, [items, search]);
+    return items.filter((item) => {
+      const matchesType = type === "all" || item.type === type;
+      const matchesSearch =
+        !query ||
+        `${item.title ?? ""} ${item.project_name ?? ""}`.toLowerCase().includes(query);
+      return matchesType && matchesSearch;
+    });
+  }, [items, search, type]);
 
-  const runSearch = (value) => {
-    setSearch(value);
-    onSearch?.({ search: value });
+  const load = (nextSearch, nextType) => {
+    onSearch?.({
+      search: nextSearch || undefined,
+      type: nextType === "all" ? undefined : nextType,
+    });
+  };
+
+  const restore = async (item) => {
+    const key = `${item.type}-${item.id}`;
+    setBusyKey(key);
+    setError("");
+    try {
+      await onRestore(item);
+    } catch (err) {
+      setError(err?.response?.data?.message || "Failed to restore the item.");
+    } finally {
+      setBusyKey("");
+    }
+  };
+
+  const confirmAction = async () => {
+    if (!pendingAction) return;
+    const key = pendingAction.kind === "empty"
+      ? "empty"
+      : `${pendingAction.item.type}-${pendingAction.item.id}`;
+    setBusyKey(key);
+    setError("");
+    try {
+      if (pendingAction.kind === "empty") {
+        await onEmptyTrash();
+      } else {
+        await onPermanentDelete(pendingAction.item);
+      }
+      setPendingAction(null);
+    } catch (err) {
+      setError(err?.response?.data?.message || "The trash operation failed.");
+    } finally {
+      setBusyKey("");
+    }
   };
 
   return (
@@ -54,23 +97,38 @@ export default function TrashPage({
       <header className="trash-topbar">
         <div className="trash-title-row">
           <h1>Trash</h1>
-          <span>System Maintenance</span>
+          <span>{items.length} deleted {items.length === 1 ? "item" : "items"}</span>
         </div>
-        <label className="search-box trash-search-box">
-          <svg aria-hidden="true" className="ui-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
-          </svg>
-          <input
-            placeholder="Search deleted items..."
-            value={search}
-            onChange={(e) => runSearch(e.target.value)}
-          />
-        </label>
-        <button className="icon-button notification-dot" type="button" aria-label="Notifications">
-          <svg className="ui-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7M13.7 21a2 2 0 0 1-3.4 0" />
-          </svg>
-        </button>
+        <div className="trash-toolbar">
+          <label className="search-box trash-search-box">
+            <svg aria-hidden="true" className="ui-icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path d="m21 21-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
+            </svg>
+            <input
+              placeholder="Search deleted items..."
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                load(event.target.value, type);
+              }}
+            />
+          </label>
+          <select
+            className="app-select repository-filter"
+            value={type}
+            onChange={(event) => {
+              setType(event.target.value);
+              load(search, event.target.value);
+            }}
+            aria-label="Filter trash by category"
+          >
+            <option value="all">All items</option>
+            <option value="project">Projects</option>
+            <option value="task">Tasks</option>
+          </select>
+          <NotificationBell {...notificationProps} />
+          <FaqButton onClick={onOpenFaq} />
+        </div>
       </header>
 
       <section className="trash-reclaim-card">
@@ -84,55 +142,80 @@ export default function TrashPage({
             </svg>
           </span>
           <div>
-            <h2>Storage Reclaim</h2>
+            <h2>Permanent Deletion</h2>
             <p>
-              Emptying your trash will permanently delete <strong>{items.length} items</strong>.
-              Restore anything you want to keep before emptying it.
+              Emptying Trash will permanently delete <strong>{items.length} items</strong>.
+              Restore anything you want to keep first.
             </p>
           </div>
         </div>
-        <button className="trash-empty-button" type="button" onClick={onEmptyTrash} disabled={!items.length}>
+        <button
+          className="trash-empty-button"
+          type="button"
+          onClick={() => setPendingAction({ kind: "empty" })}
+          disabled={!items.length || Boolean(busyKey)}
+        >
           Empty Trash
         </button>
       </section>
 
-      <section className="trash-visual-panel" aria-label="Deleted item preview">
-        <div className="trash-blur-card trash-blur-card-one" />
-        <div className="trash-blur-card trash-blur-card-two" />
-        <div className="trash-blur-card trash-blur-card-three" />
-      </section>
-
+      {error && <p className="dashboard-error">{error}</p>}
       <section className="trash-list">
-        {filteredItems.map((item) => (
-          <article className="trash-item" key={`${item.type}-${item.id}`}>
-            <span className="trash-item-icon">
-              <TrashIcon type={item.type} />
-            </span>
-            <div>
-              <h2>{item.type === "project" ? "Project: " : "Task: "}{item.title}</h2>
-              <p>
-                <span>{deletedLabel(item.deleted_at)}</span>
-                <i />
-                <strong>{daysUntil(item.expires_at)}</strong>
-              </p>
-            </div>
-            <div className="trash-item-actions">
-              <button type="button" onClick={() => onRestore(item)}>Restore</button>
-              <button type="button" onClick={() => onPermanentDelete(item)}>Delete Forever</button>
-            </div>
-          </article>
-        ))}
+        {filteredItems.map((item) => {
+          const key = `${item.type}-${item.id}`;
+          const busy = busyKey === key;
+          return (
+            <article className="trash-item" key={key}>
+              <span className="trash-item-icon">
+                <TrashIcon type={item.type} />
+              </span>
+              <div className="trash-item-copy">
+                <h2>{item.type === "project" ? "Project: " : "Task: "}{item.title}</h2>
+                <p>{deletedLabel(item.deleted_at)}</p>
+              </div>
+              <div className="trash-item-actions">
+                <button type="button" disabled={Boolean(busyKey)} onClick={() => restore(item)}>
+                  {busy ? "Working..." : "Restore"}
+                </button>
+                <button
+                  type="button"
+                  disabled={Boolean(busyKey)}
+                  onClick={() => setPendingAction({ kind: "delete", item })}
+                >
+                  Delete Forever
+                </button>
+              </div>
+            </article>
+          );
+        })}
         {!filteredItems.length && (
           <div className="empty-dashboard-state">
             <p>Trash is empty.</p>
-            <span>Deleted projects and tasks will appear here first.</span>
+            <span>Deleted projects and tasks will appear here.</span>
           </div>
         )}
       </section>
 
       <div className="trash-load-row">
-        <button type="button">Showing {filteredItems.length} items</button>
+        <span>Showing {filteredItems.length} items</span>
       </div>
+
+      {pendingAction && (
+        <ConfirmModal
+          title={pendingAction.kind === "empty" ? "Empty trash?" : "Delete forever?"}
+          message={
+            pendingAction.kind === "empty"
+              ? `Permanently delete all ${items.length} items in Trash?`
+              : `Permanently delete "${pendingAction.item.title}"? This cannot be undone.`
+          }
+          confirmLabel={pendingAction.kind === "empty" ? "Empty Trash" : "Delete Forever"}
+          busy={Boolean(busyKey)}
+          onCancel={() => {
+            if (!busyKey) setPendingAction(null);
+          }}
+          onConfirm={confirmAction}
+        />
+      )}
     </section>
   );
 }
